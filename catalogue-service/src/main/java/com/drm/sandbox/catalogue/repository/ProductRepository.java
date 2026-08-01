@@ -1,7 +1,7 @@
-package com.drm.sandbox.manager.repository;
+package com.drm.sandbox.catalogue.repository;
 
 
-import com.drm.sandbox.manager.entity.Product;
+import com.drm.sandbox.catalogue.entity.Product;
 
 import java.util.List;
 import java.util.Optional;

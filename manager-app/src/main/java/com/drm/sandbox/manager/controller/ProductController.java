@@ -2,7 +2,6 @@ package com.drm.sandbox.manager.controller;
 
 import com.drm.sandbox.manager.controller.payload.UpdateProductPayload;
 import com.drm.sandbox.manager.entity.Product;
-import com.drm.sandbox.manager.service.ProductService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

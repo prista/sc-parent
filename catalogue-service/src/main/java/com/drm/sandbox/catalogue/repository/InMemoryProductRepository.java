@@ -1,6 +1,6 @@
-package com.drm.sandbox.manager.repository;
+package com.drm.sandbox.catalogue.repository;
 
-import com.drm.sandbox.manager.entity.Product;
+import com.drm.sandbox.catalogue.entity.Product;
 import org.springframework.stereotype.Repository;
 
 import java.util.*;

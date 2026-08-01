@@ -1,7 +1,7 @@
-package com.drm.sandbox.manager.service;
+package com.drm.sandbox.catalogue.service;
 
-import com.drm.sandbox.manager.entity.Product;
-import com.drm.sandbox.manager.repository.ProductRepository;
+import com.drm.sandbox.catalogue.entity.Product;
+import com.drm.sandbox.catalogue.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

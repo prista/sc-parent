@@ -1,6 +1,7 @@
-package com.drm.sandbox.manager.service;
+package com.drm.sandbox.catalogue.service;
 
-import com.drm.sandbox.manager.entity.Product;
+
+import com.drm.sandbox.catalogue.entity.Product;
 
 import java.util.List;
 import java.util.Optional;
