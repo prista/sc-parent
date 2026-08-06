@@ -23,7 +23,7 @@ public class ProductRestController {
     private final ProductService productService;
     private final MessageSource messageSource;
 
-    @GetMapping
+    @ModelAttribute("product")
     public Product getProduct(@PathVariable("productId") int productId) {
         return this.productService.findProduct(productId)
                 .orElseThrow(() -> new NoSuchElementException("catalogue.errors.product.not_found"));

@@ -22,25 +22,27 @@ public class ProductsRestController {
 
     @GetMapping
     public List<Product> findProducts() {
-        return productService.findAllProducts();
+        return this.productService.findAllProducts();
     }
 
     @PostMapping
-    public ResponseEntity<?> save(@Valid @RequestBody NewProductPayload payload,
-                                        BindingResult bindingResult,
-                                        UriComponentsBuilder uriComponentsBuilder) throws BindException {
+    public ResponseEntity<?> createProduct(@Valid @RequestBody NewProductPayload payload,
+                                           BindingResult bindingResult,
+                                           UriComponentsBuilder uriComponentsBuilder)
+            throws BindException {
         if (bindingResult.hasErrors()) {
             if (bindingResult instanceof BindException exception) {
                 throw exception;
             } else {
                 throw new BindException(bindingResult);
             }
+        } else {
+            var product = this.productService.createProduct(payload.title(), payload.details());
+            return ResponseEntity
+                    .created(uriComponentsBuilder
+                            .replacePath("/catalogue-api/products/{productId}")
+                            .build(Map.of("productId", product.getId())))
+                    .body(product);
         }
-        var product = productService.createProduct(payload.title(), payload.details());
-        return ResponseEntity
-                .created(uriComponentsBuilder
-                        .replacePath("/catalogue-api/products/{productId}")
-                        .build(Map.of("productId", product.getId())))
-                .body(product);
     }
 }
