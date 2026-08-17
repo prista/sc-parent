@@ -3,12 +3,11 @@ package com.drm.sandbox.catalogue.service;
 
 import com.drm.sandbox.catalogue.entity.Product;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface ProductService {
 
-    List<Product> findAllProducts();
+    Iterable<Product> findAllProducts();
 
     Product createProduct(String title, String details);
 

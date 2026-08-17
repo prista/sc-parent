@@ -5,7 +5,6 @@ import com.drm.sandbox.catalogue.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -16,7 +15,7 @@ public class DefaultProductService implements ProductService {
     private final ProductRepository productRepository;
 
     @Override
-    public List<Product> findAllProducts() {
+    public Iterable<Product> findAllProducts() {
         return this.productRepository.findAll();
     }
 
