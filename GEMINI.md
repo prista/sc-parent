@@ -8,9 +8,9 @@ When working with third-party libraries, always consult official documentation t
 
 ## Commands
 
-- **Build Project:** `./mvnw clean install` (from project root)
-- **Run `catalogue-service`:** Navigate to `catalogue-service` directory, then `../mvnw spring-boot:run`
-- **Run `manager-app`:** Navigate to `manager-app` directory, then `../mvnw spring-boot:run`
+- **Build Project:** `mvn clean install` (from project root, requires global Maven)
+- **Run `catalogue-service`:** Navigate to `catalogue-service` directory, then `./mvnw spring-boot:run`
+- **Run `manager-app`:** Navigate to `manager-app` directory, then `./mvnw spring-boot:run`
 
 ## Architecture
 
