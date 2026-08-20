@@ -17,7 +17,8 @@ public class DefaultProductService implements ProductService {
 
     /**
      * Retrieves all products. If a filter string is provided, it searches for products
-     * whose titles contain the filter string (case-insensitive).
+     * whose titles contain the filter string (case-insensitive). The '%' characters are
+     * used as SQL wildcards to perform a 'contains' search (e.g., '%filter%').
      *
      * @param filter an optional string to filter products by title; if null or blank, all products are returned.
      * @return an {@link Iterable} of {@link Product} objects matching the criteria.
