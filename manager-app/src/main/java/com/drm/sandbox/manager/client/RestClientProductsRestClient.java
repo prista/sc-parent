@@ -37,13 +37,11 @@ public class RestClientProductsRestClient implements ProductsRestClient {
      * @return список товаров; пустой список, если товаров нет
      */
     @Override
-    public List<Product> findAllProducts() {
+    public List<Product> findAllProducts(String filter) {
         return this.restClient
                 // Строим GET-запрос; baseUrl уже задан в настроенном бине RestClient.
                 .get()
-                // Путь добавляется к baseUrl.
-                .uri("/catalogue-api/products")
-                // Инициируем выполнение запроса; по умолчанию для 4xx/5xx бросает HttpClientErrorException.
+                .uri("/catalogue-api/products?filter={filter}", filter)
                 .retrieve()
                 // Десериализуем тело ответа (JSON-массив) в List<Product> с помощью тип-ссылки.
                 .body(PRODUCTS_TYPE_REFERENCE);
