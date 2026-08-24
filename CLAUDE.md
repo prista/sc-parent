@@ -12,28 +12,32 @@ When working with third-party libraries, always consult official documentation t
 - **Run `catalogue-service`:** Navigate to `catalogue-service` directory, then `./mvnw spring-boot:run` (starts on port `8081`)
 - **Run `manager-app`:** Navigate to `manager-app` directory, then `./mvnw spring-boot:run` (starts on port `8080`)
 - **Access UI:** `http://localhost:8080/catalogue/products/list`
+- **Database:** Two PostgreSQL databases are required — `catalogue` (port `5432`, user `catalogue`/`catalogue`) for `catalogue-service`, and `manager` (port `5433`, user `manager`/`manager`) for `manager-app`. See `README.MD` for `docker run` commands.
 
 ## Architecture
 
 This is a multi-module Spring Boot application comprised of two distinct services:
 
-- **`catalogue-service`**: A backend REST API for product management. Stateless single source of truth for product data; exposes REST at `/catalogue-api/products`.
-- **`manager-app`**: A server-side rendered web application providing the user interface, acting as a client to the `catalogue-service`.
+- **`catalogue-service`**: A backend REST API for product management. Stateless single source of truth for product data; exposes REST at `/catalogue-api/products`. Secured with HTTP Basic auth (requires `SERVICE` role).
+- **`manager-app`**: A server-side rendered web application providing the user interface, acting as a client to the `catalogue-service` (authenticates via HTTP Basic). Owns its own database for user/authority management.
 
 ### Tech Stack
 
 - **Runtime:** Java 21
 - **Framework:** Spring Boot
 - **Build Tool:** Maven
-- **Database:** PostgreSQL (managed by Flyway for migrations)
+- **Database:** PostgreSQL (two separate databases, managed by Flyway for migrations)
 - **Templating (Frontend):** Thymeleaf
+- **Security:** Spring Security (HTTP Basic service-to-service auth)
 
 ### Key Dependencies
 
 - `org.springframework.boot:spring-boot-starter-web`
 - `org.springframework.boot:spring-boot-starter-data-jpa`
+- `org.springframework.boot:spring-boot-starter-security`
+- `org.springframework.boot:spring-boot-starter-flyway`
+- `org.flywaydb:flyway-database-postgresql`
 - `org.postgresql:postgresql`
-- `org.flywaydb:flyway-core`
 - `org.springframework.boot:spring-boot-starter-thymeleaf`
 - `org.projectlombok:lombok` (for DTOs and entities)
 
@@ -46,5 +50,10 @@ This is a multi-module Spring Boot application comprised of two distinct service
   - `src/main/resources/db/migration/` - Flyway SQL migration scripts
 - `manager-app/` - Frontend web application module
   - `src/main/java/com/drm/sandbox/manager/` - Java source
+  - `src/main/java/com/drm/sandbox/manager/entity/` - JPA entities (`User`, `Authority`, `Product`)
+  - `src/main/java/com/drm/sandbox/manager/repository/` - Spring Data repositories (`UserRepository`)
+  - `src/main/java/com/drm/sandbox/manager/security/` - `MUserDetailService` (UserDetailsService)
+  - `src/main/java/com/drm/sandbox/manager/config/` - `ClientBeans` (RestClient + Basic auth interceptor)
   - `src/main/resources/application-standalone.yaml` - Application configuration
+  - `src/main/resources/db/migration/` - Flyway SQL migration scripts
   - `src/main/resources/templates/` - Thymeleaf HTML templates

@@ -17,11 +17,16 @@ A web application for managing a product catalogue. The system is built with a t
   - Spring Data JPA
   - PostgreSQL
   - Flyway for database migrations
+  - Spring Security (HTTP Basic, service-to-service)
   - Maven
 - **Frontend (`manager-app`):**
   - Java 21 & Spring Boot
   - Thymeleaf for server-side template rendering
   - Spring MVC
+  - Spring Data JPA (user management data)
+  - PostgreSQL (own `manager` database)
+  - Flyway for database migrations
+  - Spring Security (user detail service)
   - Maven
 
 ## 2. Architecture
@@ -30,8 +35,8 @@ A web application for managing a product catalogue. The system is built with a t
 
 The application follows a distributed, two-service model:
 
-- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management.
-- **`manager-app`:** A frontend web application that serves a user interface for managing products. It is a client of the `catalogue-service` and interacts with it via its REST API.
+- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It is secured with HTTP Basic authentication and only accepts calls from authenticated clients holding the `SERVICE` role.
+- **`manager-app`:** A server-side rendered web application that serves a user interface for managing products. It is a client of the `catalogue-service` and interacts with it via its REST API, authenticating each request with HTTP Basic credentials. It also owns its own database for user/authority management.
 
 ### 2.2 Application Layers
 
@@ -42,15 +47,21 @@ The application follows a distributed, two-service model:
 
 **Client & API Layer**
 - The `manager-app` contains a REST client (`ProductsRestClient`) responsible for communicating with the `catalogue-service`.
+- The `RestClient` is built in `ClientBeans` with a `BasicAuthenticationInterceptor` that injects HTTP Basic credentials into every outgoing request.
 - The `catalogue-service` provides a formal REST API contract at `/catalogue-api/products`.
+
+**Security Layer**
+- `catalogue-service` secures its API (`/catalogue-api/**`) with HTTP Basic authentication, requiring the `SERVICE` role (`SecurityConfig`). The client credentials are configured as an in-memory user.
+- `manager-app` implements `UserDetailsService` (`MUserDetailService`) backed by its own `user_management` schema to resolve users and their authorities.
 
 **Service Layer (`catalogue-service`)**
 - Contains the core business logic within `DefaultProductService`.
 - Orchestrates data validation and persistence operations.
 
-**Data Access Layer (`catalogue-service`)**
-- Spring Data JPA repositories (`ProductRepository`) provide an abstraction over the database.
-- Flyway manages the evolution of the PostgreSQL database schema through SQL migration scripts.
+**Data Access Layer**
+- `catalogue-service`: Spring Data JPA repository (`ProductRepository`) over the `catalogue` schema.
+- `manager-app`: Spring Data JPA repository (`UserRepository`) over the `user_management` schema.
+- Flyway manages the evolution of both PostgreSQL schemas through SQL migration scripts.
 
 ## 3. Functional Requirements
 
@@ -65,7 +76,7 @@ A user accessing the `manager-app` can:
 
 ### 3.2 Product API (`catalogue-service`)
 
-The public API provides endpoints for full CRUD functionality on products. The API is stateless and does not handle authentication or authorization.
+The API provides endpoints for full CRUD functionality on products. It is stateless and secured with HTTP Basic authentication: every request must carry credentials for a user holding the `SERVICE` role.
 
 ## 4. Non-Functional Requirements
 
@@ -76,7 +87,8 @@ The public API provides endpoints for full CRUD functionality on products. The A
 - The strict separation of concerns between the backend API and the frontend UI allows for independent development, testing, and deployment.
 
 **Security**
-- The current implementation has no security measures. The API is open and accessible without authentication. For a production system, this would need to be addressed (e.g., using Spring Security).
+- Service-to-service communication between `manager-app` and `catalogue-service` is protected with HTTP Basic authentication. `catalogue-service` restricts `/catalogue-api/**` to clients holding the `SERVICE` role; `manager-app` supplies the configured credentials via a `BasicAuthenticationInterceptor`.
+- `manager-app` persists users and their authorities in a dedicated `user_management` schema and resolves them through `MUserDetailService`. End-user authentication for the web UI is not yet wired up (no login flow or `SecurityFilterChain` in `manager-app` yet).
 
 ## 5. Data Model & Database Schema (PostgreSQL)
 
@@ -100,6 +112,38 @@ create table catalogue.t_product
 | `id`      | `serial`      | Unique identifier and primary key for the product.      |
 | `c_title` | `varchar(50)` | The title of the product. Must be at least 3 chars.     |
 | `c_details`| `varchar(1000)`| A detailed description of the product (optional).       |
+
+### 5.2 `user_management` Schema (`manager-app`)
+
+These tables store user accounts and their authorities for authentication/authorization. They live in the `manager` database and are mapped by the `manager-app` JPA entities (`User`, `Authority`).
+
+```sql
+create schema if not exists user_management;
+
+create table user_management.t_user (
+    id         serial primary key,
+    c_username varchar not null check (length(trim(c_username)) > 0) unique,
+    c_password varchar
+);
+
+create table user_management.t_authority (
+    id serial primary key,
+    c_authority varchar not null check (length(trim(c_authority)) > 0) unique
+);
+
+create table user_management.t_user_2_authority (
+    id serial primary key,
+    id_user int not null references user_management.t_user(id),
+    id_authority int not null references user_management.t_authority(id),
+    constraint uk_user_authority unique (id_user, id_authority)
+);
+```
+
+| Table                  | Purpose                                                     |
+|------------------------|-------------------------------------------------------------|
+| `t_user`               | User accounts (`c_username`, `c_password`).                 |
+| `t_authority`          | Authority/role values (`c_authority`).                      |
+| `t_user_2_authority`   | Many-to-many join between users and authorities.            |
 
 
 ## 6. Backend API Design (`catalogue-service`)
@@ -176,11 +220,13 @@ The frontend is a classic server-side rendered application using Spring MVC and 
 
 ### 7.2 Client-Side Communication
 
-The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation.
+The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation. The underlying `RestClient` is built in `ClientBeans` with a `BasicAuthenticationInterceptor` that injects HTTP Basic credentials (configured under `selmag.services.catalogue.*`) into every outgoing request.
 
 ## 8. Development Workflow
 
-1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. Create a database named `catalogue` with a user `catalogue` and password `catalogue`.
+1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. The system uses two separate databases:
+    - `catalogue` (port `5432`), user `catalogue` / password `catalogue` — used by `catalogue-service`.
+    - `manager` (port `5433`), user `manager` / password `manager` — used by `manager-app` for user management.
 2.  **Build Project:** From the project root, run `./mvnw clean install` to build both modules.
 3.  **Run Backend Service:** Navigate to the `catalogue-service` directory and run `../mvnw spring-boot:run`. The service will start on port `8081` and Flyway will apply database migrations.
 4.  **Run Frontend Application:** In a new terminal, navigate to the `manager-app` directory and run `../mvnw spring-boot:run`. The web application will start on port `8080`.
