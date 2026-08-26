@@ -22,9 +22,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .authorizeHttpRequests((authorize) -> authorize
+                .authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
                         .anyRequest().hasRole("MANAGER"))
                 .oauth2Login(Customizer.withDefaults())
+                .oauth2Client(Customizer.withDefaults())
                 .build();
     }
 
