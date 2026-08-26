@@ -17,7 +17,7 @@ A web application for managing a product catalogue. The system is built with a t
   - Spring Data JPA
   - PostgreSQL
   - Flyway for database migrations
-  - Spring Security (HTTP Basic, service-to-service)
+  - Spring Security (OAuth2 resource server, JWT)
   - Maven
 - **Frontend (`manager-app`):**
   - Java 21 & Spring Boot
@@ -26,17 +26,18 @@ A web application for managing a product catalogue. The system is built with a t
   - Spring Data JPA (user management data)
   - PostgreSQL (own `manager` database)
   - Flyway for database migrations
-  - Spring Security (user detail service)
+  - Spring Security (OAuth2 login + client)
   - Maven
 
 ## 2. Architecture
 
 ### 2.1 High-Level Architecture
 
-The application follows a distributed, two-service model:
+The application follows a distributed, two-service model plus a third-party identity provider:
 
-- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It is secured with HTTP Basic authentication and only accepts calls from authenticated clients holding the `SERVICE` role.
-- **`manager-app`:** A server-side rendered web application that serves a user interface for managing products. It is a client of the `catalogue-service` and interacts with it via its REST API, authenticating each request with HTTP Basic credentials. It also owns its own database for user/authority management.
+- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It acts as an OAuth2 **resource server**: it validates JWT access tokens (issued by Keycloak) and authorizes each endpoint by the token's scopes — `SCOPE_view_catalogue` for reads and `SCOPE_edit_catalogue` for writes.
+- **`manager-app`:** A server-side rendered web application that serves a user interface for managing products. It is an OAuth2 **client** of the `catalogue-service`: end users authenticate against Keycloak (`oauth2Login`), and each service-to-service call to `catalogue-service` carries a Bearer access token obtained via the OAuth2 client.
+- **`Keycloak`:** The identity/authorization provider (realm `selmag`). It authenticates users, issues access tokens, and defines the realm roles (`ROLE_MANAGER`, `ROLE_CUSTOMER`), groups (`managers`, `customers`) and client scopes (`view_catalogue`, `edit_catalogue`) used across the system.
 
 ### 2.2 Application Layers
 
@@ -47,12 +48,12 @@ The application follows a distributed, two-service model:
 
 **Client & API Layer**
 - The `manager-app` contains a REST client (`ProductsRestClient`) responsible for communicating with the `catalogue-service`.
-- The `RestClient` is built in `ClientBeans` with a `BasicAuthenticationInterceptor` that injects HTTP Basic credentials into every outgoing request.
+- The `RestClient` is built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that, on every outgoing request, obtains an OAuth2 access token via the `OAuth2AuthorizedClientManager` (client registration `keycloak`) and attaches it as a Bearer token.
 - The `catalogue-service` provides a formal REST API contract at `/catalogue-api/products`.
 
 **Security Layer**
-- `catalogue-service` secures its API (`/catalogue-api/**`) with HTTP Basic authentication, requiring the `SERVICE` role (`SecurityConfig`). The client credentials are configured as an in-memory user.
-- `manager-app` implements `UserDetailsService` (`MUserDetailService`) backed by its own `user_management` schema to resolve users and their authorities.
+- `catalogue-service` secures its API (`/catalogue-api/**`) as an OAuth2 resource server (`SecurityConfig`): every request must carry a valid JWT, and each endpoint requires the appropriate scope — `SCOPE_view_catalogue` (GET) or `SCOPE_edit_catalogue` (POST/PATCH/DELETE). Everything else is denied (`denyAll()`).
+- `manager-app` enables `oauth2Login` and `oauth2Client` (`SecurityConfig`). A custom `OAuth2UserService` flattens the user's authorities from the ID token together with `groups`-claim entries prefixed with `ROLE_`; all UI requests require the `ROLE_MANAGER` role.
 
 **Service Layer (`catalogue-service`)**
 - Contains the core business logic within `DefaultProductService`.
@@ -62,6 +63,14 @@ The application follows a distributed, two-service model:
 - `catalogue-service`: Spring Data JPA repository (`ProductRepository`) over the `catalogue` schema.
 - `manager-app`: Spring Data JPA repository (`UserRepository`) over the `user_management` schema.
 - Flyway manages the evolution of both PostgreSQL schemas through SQL migration scripts.
+
+### 2.3 OAuth2 / Keycloak Scheme
+
+The system delegates authentication and authorization to **Keycloak** (realm `selmag`, issuer `http://localhost:8082/realms/selmag`).
+
+- **End-user authentication (`manager-app` → browser):** `oauth2Login` redirects unauthenticated users to Keycloak. After the authorization-code flow completes, the user's authorities are built from the ID token plus the `groups` claim (only entries prefixed with `ROLE_` are kept, mapped to `SimpleGrantedAuthority`). The whole UI is gated by `ROLE_MANAGER`.
+- **Service-to-service (`manager-app` → `catalogue-service`):** the client registration `keycloak` (client id `manager-app`) requests scopes `openid`, `view_catalogue`, `edit_catalogue`, `microprofile-jwt`. `OAuthClientHttpRequestInterceptor` uses an `OAuth2AuthorizedClientManager` to obtain an access token for the current principal and sends it as `Authorization: Bearer …`. `catalogue-service` validates the token against the Keycloak issuer and checks the `SCOPE_*` authorities declared in `SecurityConfig`.
+- **Realm configuration:** roles `ROLE_MANAGER` / `ROLE_CUSTOMER`; groups `managers` / `customers` (each group maps to its realm role); client scopes `view_catalogue`, `edit_catalogue`, and `microprofile-jwt` (with `upn` and `groups` protocol mappers). Note the `groups` mapper is actually an `oidc-usermodel-realm-role-mapper`, so the `groups` claim carries the user's **realm roles** (`ROLE_MANAGER`, …) — this is what the app's `OAuth2UserService` filters on. The realm is exported at `config/keycloak/import/realm-export.json` and imported by the Keycloak container.
 
 ## 3. Functional Requirements
 
@@ -76,7 +85,7 @@ A user accessing the `manager-app` can:
 
 ### 3.2 Product API (`catalogue-service`)
 
-The API provides endpoints for full CRUD functionality on products. It is stateless and secured with HTTP Basic authentication: every request must carry credentials for a user holding the `SERVICE` role.
+The API provides endpoints for full CRUD functionality on products. It is stateless and secured as an OAuth2 resource server: every request must carry a valid JWT access token, and each endpoint requires the appropriate scope — `SCOPE_view_catalogue` (GET) or `SCOPE_edit_catalogue` (POST/PATCH/DELETE).
 
 ## 4. Non-Functional Requirements
 
@@ -87,8 +96,9 @@ The API provides endpoints for full CRUD functionality on products. It is statel
 - The strict separation of concerns between the backend API and the frontend UI allows for independent development, testing, and deployment.
 
 **Security**
-- Service-to-service communication between `manager-app` and `catalogue-service` is protected with HTTP Basic authentication. `catalogue-service` restricts `/catalogue-api/**` to clients holding the `SERVICE` role; `manager-app` supplies the configured credentials via a `BasicAuthenticationInterceptor`.
-- `manager-app` persists users and their authorities in a dedicated `user_management` schema and resolves them through `MUserDetailService`. End-user authentication for the web UI is not yet wired up (no login flow or `SecurityFilterChain` in `manager-app` yet).
+- Service-to-service communication between `manager-app` and `catalogue-service` is protected with OAuth2. `catalogue-service` acts as a resource server, restricting `/catalogue-api/**` to requests carrying a valid JWT with the required scope (`SCOPE_view_catalogue` / `SCOPE_edit_catalogue`); `manager-app` attaches a Bearer token via `OAuthClientHttpRequestInterceptor`.
+- End-user authentication for the web UI is handled by Keycloak through `oauth2Login`; the whole UI requires the `ROLE_MANAGER` role. A custom `OAuth2UserService` merges ID-token authorities with `ROLE_`-prefixed entries from the `groups` claim.
+- The `user_management` schema, `UserRepository`, `User`/`Authority` entities and `MUserDetailService` are retained from the earlier HTTP-Basic / DB-backed auth approach and are no longer wired into the active security filter chain.
 
 ## 5. Data Model & Database Schema (PostgreSQL)
 
@@ -113,9 +123,9 @@ create table catalogue.t_product
 | `c_title` | `varchar(50)` | The title of the product. Must be at least 3 chars.     |
 | `c_details`| `varchar(1000)`| A detailed description of the product (optional).       |
 
-### 5.2 `user_management` Schema (`manager-app`)
+### 5.2 `user_management` Schema (`manager-app`) — legacy
 
-These tables store user accounts and their authorities for authentication/authorization. They live in the `manager` database and are mapped by the `manager-app` JPA entities (`User`, `Authority`).
+These tables store user accounts and their authorities for authentication/authorization. They live in the `manager` database and are mapped by the `manager-app` JPA entities (`User`, `Authority`). **Note:** with the migration to Keycloak this schema is no longer used by the active security configuration; it is retained from the previous HTTP-Basic / DB-backed authentication approach.
 
 ```sql
 create schema if not exists user_management;
@@ -220,14 +230,15 @@ The frontend is a classic server-side rendered application using Spring MVC and 
 
 ### 7.2 Client-Side Communication
 
-The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation. The underlying `RestClient` is built in `ClientBeans` with a `BasicAuthenticationInterceptor` that injects HTTP Basic credentials (configured under `selmag.services.catalogue.*`) into every outgoing request.
+The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation. The underlying `RestClient` is built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that obtains an access token via the `OAuth2AuthorizedClientManager` and injects it as a Bearer token (client registration id and base URI configured under `selmag.services.catalogue.*`) into every outgoing request.
 
 ## 8. Development Workflow
 
 1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. The system uses two separate databases:
     - `catalogue` (port `5432`), user `catalogue` / password `catalogue` — used by `catalogue-service`.
     - `manager` (port `5433`), user `manager` / password `manager` — used by `manager-app` for user management.
-2.  **Build Project:** From the project root, run `./mvnw clean install` to build both modules.
-3.  **Run Backend Service:** Navigate to the `catalogue-service` directory and run `../mvnw spring-boot:run`. The service will start on port `8081` and Flyway will apply database migrations.
-4.  **Run Frontend Application:** In a new terminal, navigate to the `manager-app` directory and run `../mvnw spring-boot:run`. The web application will start on port `8080`.
-5.  **Access UI:** Open a web browser and go to `http://localhost:8080/catalogue/products/list`.
+2.  **Keycloak Setup:** Start Keycloak (`selmag-keycloak`, port `8082`, realm `selmag`). See `README.MD` for the `docker run` command and `config/keycloak/import/realm-export.json` for the realm configuration.
+3.  **Build Project:** From the project root, run `./mvnw clean install` to build both modules.
+4.  **Run Backend Service:** Navigate to the `catalogue-service` directory and run `../mvnw spring-boot:run`. The service will start on port `8081` and Flyway will apply database migrations.
+5.  **Run Frontend Application:** In a new terminal, navigate to the `manager-app` directory and run `../mvnw spring-boot:run`. The web application will start on port `8080`.
+6.  **Access UI:** Open a web browser and go to `http://localhost:8080/catalogue/products/list` (you will be redirected to Keycloak to sign in).
