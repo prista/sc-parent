@@ -2,7 +2,7 @@ selmag:
   services:
     catalogue:
       uri: http://localhost:8081
-      registration-id: keycloak
+      registration-id: catalogue-service
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5433/manager
@@ -24,3 +24,11 @@ spring:
               - view_catalogue
               - edit_catalogue
               - microprofile-jwt
+          catalogue-service:
+            provider: keycloak
+            client-id: manager-app
+            client-secret: GrMdYSYyh3L4Cl1tsVXFnHI2CrZonsfN
+            authorization-grant-type: client_credentials
+            scope:
+              - view_catalogue
+              - edit_catalogue
