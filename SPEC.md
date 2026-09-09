@@ -232,7 +232,46 @@ The frontend is a classic server-side rendered application using Spring MVC and 
 
 The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation. The underlying `RestClient` is built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that obtains an access token via the `OAuth2AuthorizedClientManager` and injects it as a Bearer token (client registration id and base URI configured under `selmag.services.catalogue.*`) into every outgoing request.
 
-## 8. Development Workflow
+## 8. Testing
+
+The project ships unit tests and Spring Boot integration tests across the two modules.
+
+### 8.1 Unit tests (`manager-app`)
+
+- `ProductsControllerTest` uses plain Mockito (`@ExtendWith(MockitoExtension.class)`, `@Mock` / `@InjectMocks`) with no Spring context. It stubs the `ProductsRestClient` and asserts the returned view name / redirect target and model attributes (success and validation-error paths).
+
+### 8.2 Integration tests
+
+Integration tests use `@SpringBootTest` with `@AutoConfigureMockMvc` (Spring Boot 4.0 package `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`) to exercise the web layer end-to-end without a live server.
+
+- **`catalogue-service` — `ProductsRestControllerIT`:** boots against an embedded Testcontainers PostgreSQL (datasource URL `jdbc:tc:postgresql:...` in `src/test/resources/application.yml`), seeds data with `@Sql("/sql/products.sql")`, and rolls back each test via `@Transactional`. The JWT is simulated with `SecurityMockMvcRequestPostProcessors.jwt()` and a mocked `JwtDecoder` (`TestingBeans`).
+- **`manager-app` — `ProductsControllerIT`:** boots with the `standalone` profile (relies on the local `manager` database) and simulates a signed-in user with `SecurityMockMvcRequestPostProcessors.user().roles("MANAGER")`. The OAuth2 client beans (`ClientRegistrationRepository`, `OAuth2AuthorizedClientRepository`) are mocked in `TestingBeans`.
+
+### 8.3 Test dependencies
+
+- `org.springframework.boot:spring-boot-starter-test` (test)
+- `org.springframework.boot:spring-boot-starter-webmvc-test` (test) — provides `@AutoConfigureMockMvc`
+- `org.springframework.security:spring-security-test` (test)
+- `org.testcontainers:testcontainers-postgresql` (test, `catalogue-service`)
+
+### 8.4 Testcontainers (`catalogue-service`)
+
+The `catalogue-service` integration tests run against an ephemeral PostgreSQL container managed by [Testcontainers](https://www.testcontainers.org/) — no local database is required.
+
+- **Configuration:** the test datasource is defined in `catalogue-service/src/test/resources/application.yml` and overrides the production `application-standalone.yaml` datasource:
+  ```yaml
+  spring:
+    datasource:
+      url: jdbc:tc:postgresql:17.4-alpine:///selmag?TC_DAEMON=true
+      username: selmag
+      password: selmag
+  ```
+- **JDBC driver approach:** the `jdbc:tc:postgresql:<tag>:///<database>` URL is handled by the Testcontainers JDBC driver, which pulls the `postgres:17.4-alpine` image and starts the container on a random port before Flyway runs.
+- **`TC_DAEMON=true`:** runs the container in daemon mode — it is left running after the test JVM exits and reused by subsequent runs, avoiding a cold start each time.
+- **Database lifecycle:** Flyway applies the migrations to the container, `@Sql("/sql/products.sql")` seeds rows before each test, and `@Transactional` rolls them back afterwards.
+- **Requirement:** Docker must be running.
+
+## 9. Development Workflow
 
 1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. The system uses two separate databases:
     - `catalogue` (port `5432`), user `catalogue` / password `catalogue` — used by `catalogue-service`.
@@ -242,3 +281,4 @@ The `RestClientProductsRestClient` class encapsulates all logic for making HTTP 
 4.  **Run Backend Service:** Navigate to the `catalogue-service` directory and run `../mvnw spring-boot:run`. The service will start on port `8081` and Flyway will apply database migrations.
 5.  **Run Frontend Application:** In a new terminal, navigate to the `manager-app` directory and run `../mvnw spring-boot:run`. The web application will start on port `8080`.
 6.  **Access UI:** Open a web browser and go to `http://localhost:8080/catalogue/products/list` (you will be redirected to Keycloak to sign in).
+7.  **Run Tests:** From the project root, run `./mvnw test` to run all tests. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.

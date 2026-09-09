@@ -9,6 +9,8 @@ When working with third-party libraries, always consult official documentation t
 ## Commands
 
 - **Build Project:** `mvn clean install` (from project root, requires global Maven)
+- **Run Tests:** `./mvnw test` (from project root; runs both modules). For a single test class: `./mvnw -pl catalogue-service -Dtest=ProductsRestControllerIT test`. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.
+- **Testcontainers (tests):** the `catalogue-service` integration tests start an ephemeral PostgreSQL container (`postgres:17.4-alpine`) via the `jdbc:tc:postgresql:...` JDBC URL in `catalogue-service/src/test/resources/application.yml`; `TC_DAEMON=true` keeps the container running and reused across test runs.
 - **Run `catalogue-service`:** Navigate to `catalogue-service` directory, then `./mvnw spring-boot:run` (starts on port `8081`)
 - **Run `manager-app`:** Navigate to `manager-app` directory, then `./mvnw spring-boot:run` (starts on port `8080`)
 - **Access UI:** `http://localhost:8080/catalogue/products/list`
@@ -33,7 +35,7 @@ This is a multi-module Spring Boot application comprised of two Spring Boot serv
 ### Tech Stack
 
 - **Runtime:** Java 21
-- **Framework:** Spring Boot
+- **Framework:** Spring Boot 4.0
 - **Build Tool:** Maven
 - **Database:** PostgreSQL (two separate databases, managed by Flyway for migrations)
 - **Templating (Frontend):** Thymeleaf
@@ -51,6 +53,10 @@ This is a multi-module Spring Boot application comprised of two Spring Boot serv
 - `org.postgresql:postgresql`
 - `org.springframework.boot:spring-boot-starter-thymeleaf`
 - `org.projectlombok:lombok` (for DTOs and entities)
+- `org.springframework.boot:spring-boot-starter-test` (test)
+- `org.springframework.boot:spring-boot-starter-webmvc-test` (test) — provides `@AutoConfigureMockMvc`
+- `org.springframework.security:spring-security-test` (test)
+- `org.testcontainers:testcontainers-postgresql` (test, `catalogue-service`)
 
 ### Project Structure
 
@@ -59,6 +65,10 @@ This is a multi-module Spring Boot application comprised of two Spring Boot serv
   - `src/main/java/com/drm/sandbox/catalogue/` - Java source
   - `src/main/resources/application-standalone.yaml` - Service configuration
   - `src/main/resources/db/migration/` - Flyway SQL migration scripts
+  - `src/test/java/com/drm/sandbox/catalogue/config/TestingBeans.java` - mock `JwtDecoder` for integration tests
+  - `src/test/java/com/drm/sandbox/catalogue/controller/ProductsRestControllerIT.java` - integration test
+  - `src/test/resources/application.yml` - Testcontainers PostgreSQL datasource
+  - `src/test/resources/sql/products.sql` - seed data for tests
 - `manager-app/` - Frontend web application module
   - `src/main/java/com/drm/sandbox/manager/` - Java source
   - `src/main/java/com/drm/sandbox/manager/entity/` - JPA entities (`User`, `Authority`, `Product`)
@@ -68,3 +78,6 @@ This is a multi-module Spring Boot application comprised of two Spring Boot serv
   - `src/main/resources/application-standalone.yaml` - Application configuration
   - `src/main/resources/db/migration/` - Flyway SQL migration scripts
   - `src/main/resources/templates/` - Thymeleaf HTML templates
+  - `src/test/java/com/drm/sandbox/manager/config/TestingBeans.java` - mock OAuth2 client beans for integration tests
+  - `src/test/java/com/drm/sandbox/manager/controller/ProductsControllerTest.java` - unit test (Mockito)
+  - `src/test/java/com/drm/sandbox/manager/controller/ProductsControllerIT.java` - integration test
