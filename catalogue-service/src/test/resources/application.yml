@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:17.4-alpine:///selmag?TC_DAEMON=true
+    username: selmag
+    password: selmag

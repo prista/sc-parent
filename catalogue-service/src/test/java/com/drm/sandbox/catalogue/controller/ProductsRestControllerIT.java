@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+// Rolls back the transaction after each test, so data changes are reverted and don't leak between tests
 @Transactional
 @SpringBootTest
 @AutoConfigureMockMvc
