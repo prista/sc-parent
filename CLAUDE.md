@@ -8,11 +8,11 @@ When working with third-party libraries, always consult official documentation t
 
 ## Commands
 
-- **Build Project:** `mvn clean install` (from project root, requires global Maven)
+- **Build Project:** `./mvnw clean install` (from project root)
 - **Run Tests:** `./mvnw test` (from project root; runs both modules). For a single test class: `./mvnw -pl catalogue-service -Dtest=ProductsRestControllerIT test`. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.
-- **Testcontainers (tests):** the `catalogue-service` integration tests start an ephemeral PostgreSQL container (`postgres:17.4-alpine`) via the `jdbc:tc:postgresql:...` JDBC URL in `catalogue-service/src/test/resources/application.yml`; `TC_DAEMON=true` keeps the container running and reused across test runs.
-- **Run `catalogue-service`:** Navigate to `catalogue-service` directory, then `./mvnw spring-boot:run` (starts on port `8081`)
-- **Run `manager-app`:** Navigate to `manager-app` directory, then `./mvnw spring-boot:run` (starts on port `8080`)
+- **Testcontainers (tests):** the `catalogue-service` integration tests start an ephemeral PostgreSQL container (`postgres:17.4-alpine`) via the `jdbc:tc:postgresql:...` JDBC URL in `catalogue-service/src/test/resources/application.yml`; `TC_DAEMON=true` keeps the container running and reused across test runs. The same applies to `manager-app/src/test/resources/application.yml`.
+- **Run `catalogue-service`:** `./mvnw -pl catalogue-service spring-boot:run` (from project root, starts on port `8081`)
+- **Run `manager-app`:** `./mvnw -pl manager-app spring-boot:run` (from project root, starts on port `8080`)
 - **Access UI:** `http://localhost:8080/catalogue/products/list`
 - **Database:** Two PostgreSQL databases are required — `catalogue` (port `5432`, user `catalogue`/`catalogue`) for `catalogue-service`, and `manager` (port `5433`, user `manager`/`manager`) for `manager-app`. See `README.MD` for `docker run` commands.
 - **Keycloak:** Required for OAuth2 — run `selmag-keycloak` on port `8082` (realm `selmag`). See `README.MD` for the `docker run` command; realm config is at `config/keycloak/import/realm-export.json`.

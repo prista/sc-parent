@@ -1,0 +1,10 @@
+selmag:
+  services:
+    catalogue:
+      uri: http://localhost:54321
+
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:17.4-alpine:///manager?TC_DAEMON=true
+    username: manager
+    password: manager
