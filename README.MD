@@ -71,3 +71,22 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 Один нюанс на будущее: каталог авторизует только по scope, а не по конкретному юзеру. То есть права определяются клиентскими scope'ами (view_catalogue/edit_catalogue),       
 которые manager-app запросил — а не тем, какой именно юзер залогинился. Если понадобится разграничение «этот юзер может менять, а этот — только смотреть», придётся проверять
 роли/группы юзера в самом catalogue-service, а не только scope.
+
+## Тестирование
+
+- Юнит-тесты: `./mvnw test`
+- Юнит + интеграционные: `./mvnw verify` (интеграционные тесты поднимают PostgreSQL через Testcontainers — нужен запущенный Docker)
+
+### Почему интеграционные тесты не запускались на `verify`
+
+`spring-boot-maven-plugin` по умолчанию на фазе `package` перепаковывает тонкий (thin) jar в fat jar и **подменяет им основной артефакт**. У fat jar другая структура (`BOOT-INF/classes`, `BOOT-INF/lib`), а `maven-failsafe-plugin` гоняет интеграционные тесты на фазе `integration-test`/`verify`, то есть **после** `package`, — и на classpath попадал fat jar вместо тонкого, из-за чего тесты не могли поднять контекст и просто не отрабатывали.
+
+Исправление — задали классификатор в `spring-boot-maven-plugin` (в обоих модулях):
+
+```xml
+<configuration>
+    <classifier>exec</classifier>
+</configuration>
+```
+
+Теперь `repackage` кладёт fat jar в отдельный артефакт `<module>-<version>-exec.jar`, а основной артефакт остаётся тонким jar — именно его и видит failsafe на `verify`.
