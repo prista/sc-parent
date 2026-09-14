@@ -4,6 +4,10 @@ docker run --name manager-db -p 5433:5432 -e POSTGRES_DB=manager -e POSTGRES_USE
 
 docker run --name selmag-keycloak -p 8082:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin -v ./config/keycloak/import:/opt/keycloak/data/import quay.io/keycloak/keycloak:26.1.3 start-dev --import-realm
 
+## SSR
+
+`manager-app` — это **SSR** (Server-Side Rendering): HTML-страницы собираются на сервере из Thymeleaf-шаблонов и отдаются браузеру уже готовыми, а не рендерятся на клиенте JavaScript'ом (как в JS-SPA). В интеграционных тестах это видно по проверкам `view().name("...")` и `model().attribute(...)` — сервер сам решает, какой шаблон отдать и что положить в модель.
+
 ## OAuth2 Flow
 
 Роли: `manager-app` — OAuth2 клиент, `catalogue-service` — resource server, Keycloak (realm `selmag`) — IdP.
@@ -90,3 +94,28 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 ```
 
 Теперь `repackage` кладёт fat jar в отдельный артефакт `<module>-<version>-exec.jar`, а основной артефакт остаётся тонким jar — именно его и видит failsafe на `verify`.
+
+### WireMock: зачем `@WireMockTest(httpPort = 54321)` в интеграционных тестах `manager-app`
+
+`manager-app` сам не хранит товары — контроллеры (`ProductsController`, `ProductController`) на каждый запрос ходят в `catalogue-service` через `ProductsRestClient` → `RestClient` по адресу `/catalogue-api/products...`. В проде `baseUrl` = `http://localhost:8081` (`ClientBeans`), но в тесте настоящий `catalogue-service` не поднимается.
+
+- `@WireMockTest(httpPort = 54321)` поднимает **настоящий HTTP-сервер** WireMock на порту `54321`.
+- `TestingBeans` (`@Primary`) подменяет `baseUrl` на `http://localhost:54321`, поэтому все исходящие вызовы `RestClient` попадают в WireMock, а не в реальный сервис.
+- Порт `54321` выбран произвольно — важно лишь, чтобы он совпадал со значением из `TestingBeans` (`selmag.services.catalogue.uri`) и не конфликтовал с `8080`/`8081`/`8082`.
+
+В тестах WireMock используется двумя способами:
+
+- **`stubFor(...)`** — «притворяется» `catalogue-service`: задаёт ответ на запрос (товар есть → `200` + JSON, нет → `404`, валидация → `400` + `application/problem+json`). Так управляем сценарием.
+- **`verify(...)`** — проверяет, что `manager-app` реально сделал вызов с нужными параметрами (method, path, query, тело через `equalToJson`).
+
+**Почему не Mockito.** Это два разных уровня, на которых «перерезается» зависимость:
+
+| | Mockito | WireMock |
+|---|---|---|
+| Где перехватывает | вызов метода внутри JVM | реальный HTTP поверх TCP |
+| Что тестируется | только логика контроллера | контроллер → `RestClient` → HTTP (сериализация JSON, method/path/query/body, разбор статусов) |
+| Ловит ли неверный path/метод/десериализацию | нет | да (`verify` + `stubFor`) |
+
+Ключевая логика, которую покрывает WireMock, живёт внутри `RestClientProductsRestClient` и зависит от HTTP-ответа: `200` → `Product`, `404` → `Optional.empty()`, `400` + `problem+json` → исключение со списком `errors`, `204` → ок. Замокав метод Mockito, ты подставляешь конечный результат и эту логику не тестируешь.
+
+В проекте оба варианта есть рядом: `ProductsControllerTest` — unit-тест на Mockito (мокает `ProductsRestClient`), `ProductsControllerIT` / `ProductControllerIT` — интеграционные на WireMock.
