@@ -76,6 +76,34 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 которые manager-app запросил — а не тем, какой именно юзер залогинился. Если понадобится разграничение «этот юзер может менять, а этот — только смотреть», придётся проверять
 роли/группы юзера в самом catalogue-service, а не только scope.
 
+## Security (OAuth2): роли сервисов
+
+**`catalogue-service` — resource server.** Валидирует JWT на входящих запросах (`.oauth2ResourceServer` + `jwt()`), работает без сессии (`STATELESS`), CSRF отключён. Авторизует по scope:
+
+- чтение (`GET`) → `SCOPE_view_catalogue`;
+- запись (`POST`/`PATCH`/`DELETE`) → `SCOPE_edit_catalogue`;
+- всё остальное → `denyAll`.
+
+**`manager-app` — OAuth2 client в двух ролях одновременно** (но **не** resource server):
+
+1. **Логин пользователей** — `oauth2Login`: юзер логинится через Keycloak (authorization code flow), `manager-app` получает ID token + access token и хранит в сессии. Входящие запросы — session-based (в `SecurityContext` лежит `OidcUser`), JWT на входе не валидируется.
+2. **Исходящие вызовы** — `oauth2Client` + `OAuthClientHttpRequestInterceptor`: берёт из сессии access token юзера и шлёт в `catalogue-service` как `Authorization: Bearer …` (token relay).
+
+Роли: кастомный `oAuth2UserService` читает `groups`-claim из ID token, оставляет только `ROLE_`-записи и маппит их в `SimpleGrantedAuthority`, поэтому работает правило `.anyRequest().hasRole("MANAGER")` — все UI-маршруты требуют `ROLE_MANAGER`.
+
+| | `catalogue-service` | `manager-app` |
+|---|---|---|
+| Роль в OAuth2 | resource server | client (login + исходящие вызовы) |
+| Входящие запросы | валидирует JWT | session-based (`OidcUser`) |
+| Авторизация | по `SCOPE_*` | по роли `ROLE_MANAGER` |
+| Исходящие вызовы | — | interceptor → Bearer-токен юзера |
+
+### Покрытие тестами
+
+- ✅ `catalogue-service`, проверка `SCOPE_*`: `ProductsRestControllerIT` / `ProductRestControllerIT` через `.with(jwt().jwt(b -> b.claim("scope", "view_catalogue"/"edit_catalogue")))` — в т.ч. негативный кейс (валидный JWT без нужного scope → 403).
+- ✅ `manager-app`, проверка `ROLE_MANAGER`: IT-тесты контроллеров (`..._UserIsNotAuthorized_ReturnsForbidden`) — `.with(user("j.daniels"))` без роли → 403.
+- ✅ token relay: `OAuthClientHttpRequestInterceptorTest` — проверяет, что при отсутствии `Authorization` интерцептор добавляет `Bearer token`.
+
 ## Тестирование
 
 - Юнит-тесты: `./mvnw test`
