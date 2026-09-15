@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ConcurrentModel;
 
-import java.security.Principal;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
@@ -71,10 +70,9 @@ class ProductControllerTest {
     void getProduct_ReturnsProductPage() {
         // given
         var model = new ConcurrentModel();
-        var principal = mock(Principal.class);
 
         // when
-        var result = this.controller.getProduct(model, principal);
+        var result = this.controller.getProduct(model);
 
         // then
         assertEquals("catalogue/products/product", result);

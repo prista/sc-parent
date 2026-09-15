@@ -15,8 +15,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
-import java.security.Principal;
-
 @Slf4j
 @Controller
 @RequiredArgsConstructor
@@ -26,9 +24,7 @@ public class ProductsController {
     private final ProductsRestClient productsRestClient;
 
     @GetMapping("list")
-    public String getProductsList(Model model, @RequestParam(name = "filter", required = false) String filter,
-                                  Principal principal) {
-        log.info("User: {}", principal);
+    public String getProductsList(Model model, @RequestParam(name = "filter", required = false) String filter) {
         model.addAttribute("products", this.productsRestClient.findAllProducts(filter));
         model.addAttribute("filter", filter);
         return "catalogue/products/list";

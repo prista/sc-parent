@@ -12,7 +12,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
-import java.security.Principal;
 import java.util.Locale;
 import java.util.NoSuchElementException;
 
@@ -32,8 +31,7 @@ public class ProductController {
     }
 
     @GetMapping
-    public String getProduct(Model model, Principal principal) {
-        model.addAttribute("username", principal.getName());
+    public String getProduct(Model model) {
         return "catalogue/products/product";
     }
 

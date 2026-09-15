@@ -9,8 +9,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
@@ -37,17 +35,13 @@ class ProductsRestControllerTest {
     void findProduct_ReturnsProductsList() {
         // given
         var filter = "product";
-        var principal = new JwtAuthenticationToken(Jwt.withTokenValue("token")
-                .header("alg", "none")
-                .claim("email", "j.dewar@example.com")
-                .build());
 
         doReturn(List.of(new Product(1, "First Product", "Description of the first product"),
                 new Product(2, "Second Product", "Description of the second product")))
                 .when(this.productService).findAllProducts("product");
 
         // when
-        var result = this.underTest.findProducts(filter, principal);
+        var result = this.underTest.findProducts(filter);
 
         // then
         assertEquals(List.of(new Product(1, "First Product", "Description of the first product"),

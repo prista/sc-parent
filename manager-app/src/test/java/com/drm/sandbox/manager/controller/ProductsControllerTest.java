@@ -14,7 +14,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.ui.ConcurrentModel;
 
-import java.security.Principal;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -35,7 +34,6 @@ class ProductsControllerTest {
         // given
         var model = new ConcurrentModel();
         var filter = "товар";
-        var principal = mock(Principal.class);
 
         var products = IntStream.range(1, 4)
                 .mapToObj(i -> new Product(i, "Prod №%d".formatted(i),
@@ -45,7 +43,7 @@ class ProductsControllerTest {
         doReturn(products).when(this.productsRestClient).findAllProducts(filter);
 
         // when
-        var result = this.underTest.getProductsList(model, filter, principal);
+        var result = this.underTest.getProductsList(model, filter);
 
         // then
         assertEquals("catalogue/products/list", result);
