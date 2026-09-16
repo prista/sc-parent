@@ -18,19 +18,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(authorizeHttpRequests -> authorizeHttpRequests
                         .requestMatchers(HttpMethod.POST, "/catalogue-api/products")
                         .hasAuthority("SCOPE_edit_catalogue")
-                        .requestMatchers(HttpMethod.PATCH, "/catalogue-api/products/{productId:\\d+}")
+                        .requestMatchers(HttpMethod.PATCH, "/catalogue-api/products/{productId:\\d}")
                         .hasAuthority("SCOPE_edit_catalogue")
-                        .requestMatchers(HttpMethod.DELETE, "/catalogue-api/products/{productId:\\d+}")
+                        .requestMatchers(HttpMethod.DELETE, "/catalogue-api/products/{productId:\\d}")
                         .hasAuthority("SCOPE_edit_catalogue")
-                        .requestMatchers(HttpMethod.GET, "/catalogue-api/products")
-                        .hasAnyAuthority("SCOPE_view_catalogue")
-                        .requestMatchers(HttpMethod.GET, "/catalogue-api/products/{productId:\\d+}")
-                        .hasAuthority("SCOPE_view_catalogue")
-                        .anyRequest().denyAll()
-                )
+                        .requestMatchers(HttpMethod.GET).permitAll()
+                        .anyRequest().denyAll())
                 .csrf(CsrfConfigurer::disable)
-                .sessionManagement(sessionManagement ->
-                        sessionManagement.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(sessionManagement -> sessionManagement
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .oauth2ResourceServer(oauth2ResourceServer -> oauth2ResourceServer
                         .jwt(Customizer.withDefaults()))
                 .build();
