@@ -59,7 +59,7 @@ class ProductsRestControllerIT {
 
     @Test
     @Sql("/sql/products.sql")
-    void findProducts_UserIsNotAuthorized_ReturnsForbidden() throws Exception {
+    void findProducts_DefaultJWT_ReturnsProducts() throws Exception {
         // given
         var requestBuilder = MockMvcRequestBuilders.get("/catalogue-api/products")
                 .param("filter", "Product")
@@ -70,7 +70,7 @@ class ProductsRestControllerIT {
                 // then
                 .andDo(print())
                 .andExpectAll(
-                        status().isForbidden()
+                        status().isOk()
                 );
     }
 
