@@ -34,4 +34,9 @@ public class InMemoryFavouriteProductRepository implements FavouriteProductRepos
                 .singleOrEmpty(); // to convert Flux to Mono, returns empty if not found
     }
 
+    @Override
+    public Flux<FavouriteProduct> findAll() {
+        return Flux.fromIterable(this.favouriteProducts);
+    }
+
 }
