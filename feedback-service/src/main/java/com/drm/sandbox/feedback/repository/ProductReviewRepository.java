@@ -1,6 +1,6 @@
-package com.drm.sandbox.customer.repository;
+package com.drm.sandbox.feedback.repository;
 
-import com.drm.sandbox.customer.entity.ProductReview;
+import com.drm.sandbox.feedback.entity.ProductReview;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

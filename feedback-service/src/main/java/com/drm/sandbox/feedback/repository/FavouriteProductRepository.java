@@ -1,6 +1,6 @@
-package com.drm.sandbox.customer.repository;
+package com.drm.sandbox.feedback.repository;
 
-import com.drm.sandbox.customer.entity.FavouriteProduct;
+import com.drm.sandbox.feedback.entity.FavouriteProduct;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

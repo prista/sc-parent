@@ -1,7 +1,7 @@
-package com.drm.sandbox.customer.service;
+package com.drm.sandbox.feedback.service;
 
-import com.drm.sandbox.customer.entity.FavouriteProduct;
-import com.drm.sandbox.customer.repository.FavouriteProductRepository;
+import com.drm.sandbox.feedback.entity.FavouriteProduct;
+import com.drm.sandbox.feedback.repository.FavouriteProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -19,12 +19,6 @@ public class DefaultFavouriteProductsService implements FavouriteProductsService
     public Mono<FavouriteProduct> addProductToFavourites(int productId) {
         return this.favouriteProductRepository.save(new FavouriteProduct(UUID.randomUUID(), productId));
     }
-
-//    @Override
-//    public Mono<FavouriteProduct> addProductToFavourites(final int productId) {
-//        return this.favouriteProductRepository.findByProductId(productId)
-//                .switchIfEmpty(this.favouriteProductRepository.save(new FavouriteProduct(UUID.randomUUID(), productId)));
-//    }
 
     @Override
     public Mono<Void> removeProductFromFavourites(final int productId) {

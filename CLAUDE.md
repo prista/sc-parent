@@ -9,6 +9,7 @@ When working with third-party libraries, always consult official documentation t
 ## Commands
 
 - **Build Project:** `./mvnw clean install` (from project root)
+- **Executable JAR:** each service's `spring-boot-maven-plugin` (`repackage` goal) bundles the app and its dependencies into a self-contained executable JAR runnable via `java -jar`, excludes Lombok, and adds the `-exec` classifier.
 - **Run Tests:** `./mvnw test` (from project root; runs both modules). For a single test class: `./mvnw -pl catalogue-service -Dtest=ProductsRestControllerIT test`. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.
 - **Testcontainers (tests):** the `catalogue-service` integration tests start an ephemeral PostgreSQL container (`postgres:17.4-alpine`) via the `jdbc:tc:postgresql:...` JDBC URL in `catalogue-service/src/test/resources/application.yml`; `TC_DAEMON=true` keeps the container running and reused across test runs. The same applies to `manager-app/src/test/resources/application.yml`.
 - **Run `catalogue-service`:** `./mvnw -pl catalogue-service spring-boot:run` (from project root, starts on port `8081`)

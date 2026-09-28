@@ -1,8 +1,8 @@
-package com.drm.sandbox.customer.service;
+package com.drm.sandbox.feedback.service;
 
 
-import com.drm.sandbox.customer.entity.ProductReview;
-import com.drm.sandbox.customer.repository.ProductReviewRepository;
+import com.drm.sandbox.feedback.entity.ProductReview;
+import com.drm.sandbox.feedback.repository.ProductReviewRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
