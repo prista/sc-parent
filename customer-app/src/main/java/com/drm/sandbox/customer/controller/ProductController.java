@@ -5,7 +5,6 @@ import com.drm.sandbox.customer.controller.payload.NewProductReviewPayload;
 import com.drm.sandbox.customer.entity.Product;
 import com.drm.sandbox.customer.service.FavouriteProductsService;
 import com.drm.sandbox.customer.service.ProductReviewsService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -65,7 +64,7 @@ public class ProductController {
 
     @PostMapping("create-review")
     public Mono<String> createReview(@PathVariable("productId") int id,
-                                     @Valid NewProductReviewPayload payload,
+                                     NewProductReviewPayload payload,
                                      BindingResult bindingResult,
                                      Model model) {
         if (bindingResult.hasErrors()) {

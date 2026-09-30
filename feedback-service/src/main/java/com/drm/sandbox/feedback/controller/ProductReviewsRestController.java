@@ -5,14 +5,8 @@ import com.drm.sandbox.feedback.entity.ProductReview;
 import com.drm.sandbox.feedback.service.ProductReviewsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.MessageSourceResolvable;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -42,20 +36,6 @@ public class ProductReviewsRestController {
                         .created(uriComponentsBuilder.replacePath("/api/v1/feedback-api/product-reviews/{id}")
                                 .build(productReview.getId()))
                         .body(productReview));
-    }
-
-    // Shapes @Valid body validation failures (WebExchangeBindException, the WebFlux analogue of
-    // MethodArgumentNotValidException) into a structured RFC 9457 problem+json response: 400 status
-    // with an "errors" array of validation messages instead of Spring's default error body.
-    @ExceptionHandler(WebExchangeBindException.class)
-    public Mono<ResponseEntity<ProblemDetail>> handleWebExchangeBindException(WebExchangeBindException ex) {
-        var problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
-        problemDetail.setProperty("errors", ex.getAllErrors().stream()
-                .map(ObjectError::getDefaultMessage)
-                .toList());
-        return Mono.just(ResponseEntity.badRequest()
-                        .contentType(MediaType.APPLICATION_PROBLEM_JSON)
-                        .body(problemDetail));
     }
 
 }

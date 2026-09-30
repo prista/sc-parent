@@ -7,6 +7,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class FeedbackServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(CatalogueServiceApplication.class, args);
+        SpringApplication.run(FeedbackServiceApplication.class, args);
     }
 }
