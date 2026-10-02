@@ -1,30 +1,32 @@
 package com.drm.sandbox.customer.controller;
 
+import com.drm.sandbox.customer.client.FavouriteProductsClient;
+import com.drm.sandbox.customer.client.ProductReviewsClient;
 import com.drm.sandbox.customer.client.ProductsClient;
+import com.drm.sandbox.customer.client.exception.ClientBadRequestException;
 import com.drm.sandbox.customer.controller.payload.NewProductReviewPayload;
 import com.drm.sandbox.customer.entity.Product;
-import com.drm.sandbox.customer.service.FavouriteProductsService;
-import com.drm.sandbox.customer.service.ProductReviewsService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
-import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.util.NoSuchElementException;
 
-
 @Controller
 @RequiredArgsConstructor
 @RequestMapping("customer/products/{productId:\\d+}")
+@Slf4j
 public class ProductController {
 
     private final ProductsClient productsClient;
 
-    private final FavouriteProductsService favouriteProductsService;
-    private final ProductReviewsService productReviewsService;
+    private final FavouriteProductsClient favouriteProductsClient;
+
+    private final ProductReviewsClient productReviewsClient;
+
 
     // Loads the product once for every handler in this controller, so each
     // method does not have to fetch it (and handle a missing product) itself.
@@ -38,10 +40,10 @@ public class ProductController {
     @GetMapping
     public Mono<String> getProductPage(@PathVariable("productId") int id, Model model) {
         model.addAttribute("inFavourite", false);
-        return this.productReviewsService.findProductReviewsByProduct(id)
+        return this.productReviewsClient.findProductReviewsByProductId(id)
                 .collectList()
                 .doOnNext(productReviews -> model.addAttribute("reviews", productReviews))
-                .then(this.favouriteProductsService.findFavouriteProductByProduct(id)
+                .then(this.favouriteProductsClient.findFavouriteProductByProductId(id)
                         .doOnNext(favouriteProduct -> model.addAttribute("inFavourite", true)))
                 .thenReturn("customer/products/product");
     }
@@ -49,37 +51,37 @@ public class ProductController {
     @PostMapping("add-to-favourites")
     public Mono<String> addProductToFavourites(@ModelAttribute("product") Mono<Product> productMono) {
         return productMono
-                .map(Product::id)                                   // Mono<Product> -> Mono<Integer>
-                .flatMap(productId -> this.favouriteProductsService.addProductToFavourites(productId)   // lambda returns Mono<String>
-                        .thenReturn("redirect:/customer/products/%d".formatted(productId)));
+                .map(Product::id)
+                .flatMap(productId -> this.favouriteProductsClient.addProductToFavourites(productId)
+                        .thenReturn("redirect:/customer/products/%d".formatted(productId))
+                        .onErrorResume(exception -> {
+                            log.error(exception.getMessage(), exception);
+                            return Mono.just("redirect:/customer/products/%d".formatted(productId));
+                        }));
     }
 
     @PostMapping("remove-from-favourites")
     public Mono<String> removeProductFromFavourites(@ModelAttribute("product") Mono<Product> productMono) {
         return productMono
-                .map(Product::id)                                   // Mono<Product> -> Mono<Integer>
-                .flatMap(productId -> this.favouriteProductsService.removeProductFromFavourites(productId)   // lambda returns Mono<String>
+                .map(Product::id)
+                .flatMap(productId -> this.favouriteProductsClient.removeProductFromFavourites(productId)
                         .thenReturn("redirect:/customer/products/%d".formatted(productId)));
     }
 
     @PostMapping("create-review")
     public Mono<String> createReview(@PathVariable("productId") int id,
                                      NewProductReviewPayload payload,
-                                     BindingResult bindingResult,
                                      Model model) {
-        if (bindingResult.hasErrors()) {
-            model.addAttribute("inFavourite", false);
-            model.addAttribute("payload", payload);
-            model.addAttribute("errors", bindingResult.getAllErrors().stream()
-                    .map(ObjectError::getDefaultMessage)
-                    .toList());
-            return this.favouriteProductsService.findFavouriteProductByProduct(id)
-                    .doOnNext(favouriteProduct -> model.addAttribute("inFavourite", true))
-                    .thenReturn("customer/products/product");
-        } else {
-            return this.productReviewsService.createProductReview(id, payload.rating(), payload.review())
-                    .thenReturn("redirect:/customer/products/%d".formatted(id));
-        }
+        return this.productReviewsClient.createProductReview(id, payload.rating(), payload.review())
+                .thenReturn("redirect:/customer/products/%d".formatted(id))
+                .onErrorResume(ClientBadRequestException.class, exception -> {
+                    model.addAttribute("inFavourite", false);
+                    model.addAttribute("payload", payload);
+                    model.addAttribute("errors", exception.getErrors());
+                    return this.favouriteProductsClient.findFavouriteProductByProductId(id)
+                            .doOnNext(favouriteProduct -> model.addAttribute("inFavourite", true))
+                            .thenReturn("customer/products/product");
+                });
     }
 
     @ExceptionHandler(NoSuchElementException.class)

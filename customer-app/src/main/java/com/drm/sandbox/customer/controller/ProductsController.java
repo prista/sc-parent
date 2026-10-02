@@ -1,8 +1,8 @@
 package com.drm.sandbox.customer.controller;
 
+import com.drm.sandbox.customer.client.FavouriteProductsClient;
 import com.drm.sandbox.customer.client.ProductsClient;
 import com.drm.sandbox.customer.entity.FavouriteProduct;
-import com.drm.sandbox.customer.service.FavouriteProductsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -17,7 +17,8 @@ import reactor.core.publisher.Mono;
 public class ProductsController {
 
     private final ProductsClient productsClient;
-    private final FavouriteProductsService favouriteProductsService;
+
+    private final FavouriteProductsClient favouriteProductsClient;
 
     @GetMapping("list")
     public Mono<String> getProductsListPage(Model model,
@@ -33,8 +34,8 @@ public class ProductsController {
     public Mono<String> getFavouriteProductsPage(Model model,
                                                  @RequestParam(name = "filter", required = false) String filter) {
         model.addAttribute("filter", filter);
-        return this.favouriteProductsService.findFavouriteProducts()
-                .map(FavouriteProduct::getProductId)
+        return this.favouriteProductsClient.findFavouriteProducts()
+                .map(FavouriteProduct::productId)
                 .collectList()
                 .flatMap(favouriteProducts -> this.productsClient.findAllProducts(filter)
                         .filter(product -> favouriteProducts.contains(product.id()))
@@ -42,5 +43,4 @@ public class ProductsController {
                         .doOnNext(products -> model.addAttribute("products", products)))
                 .thenReturn("customer/products/favourites");
     }
-
 }
