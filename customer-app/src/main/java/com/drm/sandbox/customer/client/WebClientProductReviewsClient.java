@@ -18,7 +18,7 @@ public class WebClientProductReviewsClient implements ProductReviewsClient {
     private final WebClient webClient;
 
     @Override
-    public Flux<ProductReview> findProductReviewsByProductId(int productId) {
+    public Flux<ProductReview> findProductReviewsByProductId(Integer productId) {
         return this.webClient
                 .get()
                 .uri("/api/v1/feedback-api/product-reviews/by-product-id/{productId}", productId)
@@ -27,7 +27,7 @@ public class WebClientProductReviewsClient implements ProductReviewsClient {
     }
 
     @Override
-    public Mono<ProductReview> createProductReview(int productId, int rating, String review) {
+    public Mono<ProductReview> createProductReview(Integer productId, Integer rating, String review) {
         return this.webClient
                 .post()
                 .uri("/api/v1/feedback-api/product-reviews")
