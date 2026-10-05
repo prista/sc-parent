@@ -198,6 +198,19 @@ create table user_management.t_user_2_authority (
 
 The `feedback-service` has no database. It stores `FavouriteProduct` and `ProductReview` records in `Collections.synchronizedList`-backed repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`). All data is lost when the service restarts.
 
+### 5.4 MongoDB UUID Representation (`feedback-service`)
+
+`feedback-service` persists `UUID` ids. Spring Data MongoDB 5.x no longer applies a default `uuidRepresentation`, and Spring Boot 4.0 removed the `spring.data.mongodb.uuid-representation` property, so saving a `UUID` fails with `CodecConfigurationException: The uuidRepresentation has not been specified, so the UUID cannot be encoded.`
+
+Set it explicitly via a `MongoClientSettingsBuilderCustomizer` bean:
+
+```java
+@Bean
+MongoClientSettingsBuilderCustomizer uuidRepresentationCustomizer() {
+    return builder -> builder.uuidRepresentation(UuidRepresentation.STANDARD);
+}
+```
+
 ## 6. Backend API Design
 
 ### 6.1 `catalogue-service`
