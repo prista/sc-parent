@@ -2,79 +2,105 @@
 
 ## 1. Overview
 
-A web application for managing a product catalogue. The system is built with a two-service architecture: a backend REST API for data management and a separate frontend web application that provides the user interface.
+A web application for managing a product catalogue and collecting customer feedback. The system is built with a distributed, four-service architecture: a backend REST API for product data, a reactive feedback REST API, an admin web application for catalogue management, and a public customer storefront.
 
 ### Core Features
 
-- Product Management (Create, Read, Update, Delete).
+- Product Management (Create, Read, Update, Delete) via a REST API and an admin UI.
 - A clear REST API for managing products.
-- A server-side rendered web interface for administrators to manage the catalogue.
+- Product feedback: favourite products and product reviews (reactive REST API).
+- A server-side rendered admin interface for managing the catalogue.
+- A public, server-side rendered customer storefront for browsing products, adding favourites, and leaving reviews.
 
 ### Tech Stack
 
 - **Backend (`catalogue-service`):**
   - Java 21 & Spring Boot
+  - Spring MVC (blocking REST)
   - Spring Data JPA
   - PostgreSQL
   - Flyway for database migrations
   - Spring Security (OAuth2 resource server, JWT)
   - Maven
-- **Frontend (`manager-app`):**
+- **Feedback API (`feedback-service`):**
   - Java 21 & Spring Boot
-  - Thymeleaf for server-side template rendering
+  - Spring WebFlux (reactive REST)
+  - Reactor (`Mono`/`Flux`)
+  - In-memory repositories (no database)
+  - Bean Validation (`jakarta.validation`)
+  - Maven
+- **Admin Frontend (`manager-app`):**
+  - Java 21 & Spring Boot
   - Spring MVC
+  - Thymeleaf for server-side template rendering
   - Spring Data JPA (user management data)
   - PostgreSQL (own `manager` database)
   - Flyway for database migrations
   - Spring Security (OAuth2 login + client)
+  - Maven
+- **Customer Frontend (`customer-app`):**
+  - Java 21 & Spring Boot
+  - Spring WebFlux
+  - Thymeleaf (reactive) for server-side template rendering
+  - Reactive `WebClient` for service-to-service calls
   - Maven
 
 ## 2. Architecture
 
 ### 2.1 High-Level Architecture
 
-The application follows a distributed, two-service model plus a third-party identity provider:
+The application follows a distributed, four-service model plus a third-party identity provider:
 
-- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It acts as an OAuth2 **resource server**: it validates JWT access tokens (issued by Keycloak) and authorizes each endpoint by the token's scopes — `SCOPE_view_catalogue` for reads and `SCOPE_edit_catalogue` for writes.
-- **`manager-app`:** A server-side rendered web application that serves a user interface for managing products. It is an OAuth2 **client** of the `catalogue-service`: end users authenticate against Keycloak (`oauth2Login`), and each service-to-service call to `catalogue-service` carries a Bearer access token obtained via the OAuth2 client.
+- **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It acts as an OAuth2 **resource server**: it validates JWT access tokens (issued by Keycloak). Reads (`GET`) are public (`permitAll()`), while writes (`POST`/`PATCH`/`DELETE`) require the `SCOPE_edit_catalogue` authority.
+- **`feedback-service`:** A reactive (WebFlux) backend service that stores product feedback — favourite products and product reviews — in **in-memory repositories** (no database). It exposes a reactive REST API under `/api/v1/feedback-api/**` and is currently unsecured.
+- **`manager-app`:** A server-side rendered (Spring MVC) web application that serves an admin interface for managing products. It is an OAuth2 **client** of the `catalogue-service`: end users authenticate against Keycloak (`oauth2Login`), and each service-to-service call to `catalogue-service` carries a Bearer access token obtained via the OAuth2 client.
+- **`customer-app`:** A reactive (WebFlux), server-side rendered storefront. It is **public** (no authentication) and communicates with `catalogue-service` (products) and `feedback-service` (favourites/reviews) through reactive `WebClient` clients.
 - **`Keycloak`:** The identity/authorization provider (realm `selmag`). It authenticates users, issues access tokens, and defines the realm roles (`ROLE_MANAGER`, `ROLE_CUSTOMER`), groups (`managers`, `customers`) and client scopes (`view_catalogue`, `edit_catalogue`) used across the system.
 
 ### 2.2 Application Layers
 
-**Presentation Layer (`manager-app`)**
+**Blocking Presentation Layer (`manager-app`)**
 - Spring MVC controllers handle incoming HTTP requests.
 - Thymeleaf templates render the dynamic HTML pages.
-- Delivers a complete HTML user interface to the browser.
+- Delivers a complete HTML admin interface to the browser.
+
+**Reactive Presentation Layer (`customer-app`)**
+- WebFlux controllers (`@Controller` returning `Mono<String>`) handle incoming HTTP requests.
+- Reactive Thymeleaf templates render the dynamic HTML pages.
+- Delivers a complete HTML storefront to the browser.
 
 **Client & API Layer**
-- The `manager-app` contains a REST client (`ProductsRestClient`) responsible for communicating with the `catalogue-service`.
-- The `RestClient` is built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that, on every outgoing request, obtains an OAuth2 access token via the `OAuth2AuthorizedClientManager` (client registration `keycloak`) and attaches it as a Bearer token.
-- The `catalogue-service` provides a formal REST API contract at `/catalogue-api/products`.
+- `manager-app` → `catalogue-service`: the `ProductsRestClient` (`RestClientProductsRestClient`) uses a blocking `RestClient` built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that, on every outgoing request, obtains an OAuth2 access token via the `OAuth2AuthorizedClientManager` (client registration `keycloak`) and attaches it as a Bearer token.
+- `customer-app` → `catalogue-service` / `feedback-service`: reactive `WebClient` clients (`WebClientProductsClient`, `WebClientFavouriteProductsClient`, `WebClientProductReviewsClient`) built in `ClientConfig` (base URLs `selmag.services.catalogue.uri` and `selmag.services.feedback.uri`). They consume `Mono`/`Flux` and translate `WebClientResponseException` errors into `ClientBadRequestException` / empty results.
+- `catalogue-service` provides a formal REST API contract at `/catalogue-api/products`; `feedback-service` at `/api/v1/feedback-api/**`.
 
 **Security Layer**
-- `catalogue-service` secures its API (`/catalogue-api/**`) as an OAuth2 resource server (`SecurityConfig`): every request must carry a valid JWT, and each endpoint requires the appropriate scope — `SCOPE_view_catalogue` (GET) or `SCOPE_edit_catalogue` (POST/PATCH/DELETE). Everything else is denied (`denyAll()`).
+- `catalogue-service` secures its API as an OAuth2 resource server (`SecurityConfig`): `GET /catalogue-api/**` is `permitAll()` (no token required), while `POST`/`PATCH`/`DELETE` require `SCOPE_edit_catalogue`. Everything else is denied (`denyAll()`).
 - `manager-app` enables `oauth2Login` and `oauth2Client` (`SecurityConfig`). A custom `OAuth2UserService` flattens the user's authorities from the ID token together with `groups`-claim entries prefixed with `ROLE_`; all UI requests require the `ROLE_MANAGER` role.
+- `customer-app` and `feedback-service` are currently unsecured (no Spring Security configured).
 
-**Service Layer (`catalogue-service`)**
-- Contains the core business logic within `DefaultProductService`.
-- Orchestrates data validation and persistence operations.
+**Service Layer**
+- `catalogue-service` (`DefaultProductService`): core product business logic — validation, persistence, and the optional title `filter`.
+- `feedback-service` (`DefaultFavouriteProductsService`, `DefaultProductReviewsService`): favourite/review business logic over the in-memory repositories.
 
 **Data Access Layer**
 - `catalogue-service`: Spring Data JPA repository (`ProductRepository`) over the `catalogue` schema.
 - `manager-app`: Spring Data JPA repository (`UserRepository`) over the `user_management` schema.
-- Flyway manages the evolution of both PostgreSQL schemas through SQL migration scripts.
+- `feedback-service`: in-memory repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`) — no database, data is lost on restart.
+- Flyway manages the evolution of the PostgreSQL schemas (`catalogue`, `manager`) through SQL migration scripts.
 
 ### 2.3 OAuth2 / Keycloak Scheme
 
 The system delegates authentication and authorization to **Keycloak** (realm `selmag`, issuer `http://localhost:8082/realms/selmag`).
 
-- **End-user authentication (`manager-app` → browser):** `oauth2Login` redirects unauthenticated users to Keycloak. After the authorization-code flow completes, the user's authorities are built from the ID token plus the `groups` claim (only entries prefixed with `ROLE_` are kept, mapped to `SimpleGrantedAuthority`). The whole UI is gated by `ROLE_MANAGER`.
-- **Service-to-service (`manager-app` → `catalogue-service`):** the client registration `keycloak` (client id `manager-app`) requests scopes `openid`, `view_catalogue`, `edit_catalogue`, `microprofile-jwt`. `OAuthClientHttpRequestInterceptor` uses an `OAuth2AuthorizedClientManager` to obtain an access token for the current principal and sends it as `Authorization: Bearer …`. `catalogue-service` validates the token against the Keycloak issuer and checks the `SCOPE_*` authorities declared in `SecurityConfig`.
+- **End-user authentication (`manager-app` → browser):** `oauth2Login` redirects unauthenticated users to Keycloak. After the authorization-code flow completes, the user's authorities are built from the ID token plus the `groups` claim (only entries prefixed with `ROLE_` are kept, mapped to `SimpleGrantedAuthority`). The whole admin UI is gated by `ROLE_MANAGER`.
+- **Service-to-service (`manager-app` → `catalogue-service`):** the client registration `keycloak` (client id `manager-app`) requests scopes `openid`, `view_catalogue`, `edit_catalogue`, `microprofile-jwt`. `OAuthClientHttpRequestInterceptor` uses an `OAuth2AuthorizedClientManager` to obtain an access token for the current principal and sends it as `Authorization: Bearer …`. `catalogue-service` validates the token against the Keycloak issuer and checks the `SCOPE_*` authorities declared in `SecurityConfig` for write endpoints.
+- **Reads are public:** `catalogue-service` marks `GET /catalogue-api/**` as `permitAll()`. This lets the token-less `customer-app` browse products without any OAuth2 client configuration; only the `manager-app` performs OAuth2.
 - **Realm configuration:** roles `ROLE_MANAGER` / `ROLE_CUSTOMER`; groups `managers` / `customers` (each group maps to its realm role); client scopes `view_catalogue`, `edit_catalogue`, and `microprofile-jwt` (with `upn` and `groups` protocol mappers). Note the `groups` mapper is actually an `oidc-usermodel-realm-role-mapper`, so the `groups` claim carries the user's **realm roles** (`ROLE_MANAGER`, …) — this is what the app's `OAuth2UserService` filters on. The realm is exported at `config/keycloak/import/realm-export.json` and imported by the Keycloak container.
 
 ## 3. Functional Requirements
 
-### 3.1 Product Management (Web UI)
+### 3.1 Product Management (Admin Web UI — `manager-app`)
 
 A user accessing the `manager-app` can:
 - **View a list of all products:** The main page displays a table with all products.
@@ -83,21 +109,34 @@ A user accessing the `manager-app` can:
 - **Edit a product:** From the details page, a user can navigate to an edit form to update the title and details.
 - **Delete a product:** A button on the product details page allows for its removal from the system.
 
-### 3.2 Product API (`catalogue-service`)
+### 3.2 Customer Storefront (`customer-app`)
 
-The API provides endpoints for full CRUD functionality on products. It is stateless and secured as an OAuth2 resource server: every request must carry a valid JWT access token, and each endpoint requires the appropriate scope — `SCOPE_view_catalogue` (GET) or `SCOPE_edit_catalogue` (POST/PATCH/DELETE).
+A visitor to the `customer-app` can:
+- **Browse products** with an optional title filter (case-insensitive "contains" search).
+- **View a single product's details**, including its reviews.
+- **Add / remove a product to/from favourites.**
+- **Leave a product review** with a 1–5 rating and free-text (validated server-side).
+
+### 3.3 Product API (`catalogue-service`)
+
+The API provides endpoints for full CRUD functionality on products, plus title-based filtering. It is stateless and secured as an OAuth2 resource server: `GET` endpoints are public (`permitAll()`), while `POST`/`PATCH`/`DELETE` require a valid JWT carrying the `SCOPE_edit_catalogue` authority.
+
+### 3.4 Feedback API (`feedback-service`)
+
+The reactive API stores and returns favourites and reviews. Data lives in in-memory repositories, so it resets on restart.
 
 ## 4. Non-Functional Requirements
 
 **Reliability**
-- The system should gracefully handle errors, suchs as database connection issues or failures in the communication between the two services.
+- The system should gracefully handle errors, such as database connection issues or failures in the communication between services.
 
 **Maintainability**
-- The strict separation of concerns between the backend API and the frontend UI allows for independent development, testing, and deployment.
+- The strict separation of concerns between the backend APIs and the frontend UIs allows for independent development, testing, and deployment.
 
 **Security**
-- Service-to-service communication between `manager-app` and `catalogue-service` is protected with OAuth2. `catalogue-service` acts as a resource server, restricting `/catalogue-api/**` to requests carrying a valid JWT with the required scope (`SCOPE_view_catalogue` / `SCOPE_edit_catalogue`); `manager-app` attaches a Bearer token via `OAuthClientHttpRequestInterceptor`.
-- End-user authentication for the web UI is handled by Keycloak through `oauth2Login`; the whole UI requires the `ROLE_MANAGER` role. A custom `OAuth2UserService` merges ID-token authorities with `ROLE_`-prefixed entries from the `groups` claim.
+- Service-to-service communication between `manager-app` and `catalogue-service` is protected with OAuth2. `catalogue-service` acts as a resource server, restricting write endpoints (`POST`/`PATCH`/`DELETE` on `/catalogue-api/**`) to requests carrying a valid JWT with `SCOPE_edit_catalogue`; `manager-app` attaches a Bearer token via `OAuthClientHttpRequestInterceptor`. `GET` endpoints are public.
+- End-user authentication for the admin web UI is handled by Keycloak through `oauth2Login`; the whole admin UI requires the `ROLE_MANAGER` role. A custom `OAuth2UserService` merges ID-token authorities with `ROLE_`-prefixed entries from the `groups` claim.
+- `customer-app` and `feedback-service` are currently unsecured.
 - The `user_management` schema, `UserRepository`, `User`/`Authority` entities and `MUserDetailService` are retained from the earlier HTTP-Basic / DB-backed auth approach and are no longer wired into the active security filter chain.
 
 ## 5. Data Model & Database Schema (PostgreSQL)
@@ -155,53 +194,108 @@ create table user_management.t_user_2_authority (
 | `t_authority`          | Authority/role values (`c_authority`).                      |
 | `t_user_2_authority`   | Many-to-many join between users and authorities.            |
 
+### 5.3 `feedback-service` — in-memory storage
 
-## 6. Backend API Design (`catalogue-service`)
+The `feedback-service` has no database. It stores `FavouriteProduct` and `ProductReview` records in `Collections.synchronizedList`-backed repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`). All data is lost when the service restarts.
+
+### 5.4 MongoDB UUID Representation (`feedback-service`)
+
+`feedback-service` persists `UUID` ids. Spring Data MongoDB 5.x no longer applies a default `uuidRepresentation`, and Spring Boot 4.0 removed the `spring.data.mongodb.uuid-representation` property, so saving a `UUID` fails with `CodecConfigurationException: The uuidRepresentation has not been specified, so the UUID cannot be encoded.`
+
+Set it explicitly via a `MongoClientSettingsBuilderCustomizer` bean:
+
+```java
+@Bean
+MongoClientSettingsBuilderCustomizer uuidRepresentationCustomizer() {
+    return builder -> builder.uuidRepresentation(UuidRepresentation.STANDARD);
+}
+```
+
+## 6. Backend API Design
+
+### 6.1 `catalogue-service`
 
 All endpoints are relative to the base path `/catalogue-api/products`.
 
-### 6.1 Payloads (DTOs)
+#### Payloads (DTOs)
 
 - **`NewProductPayload`**: `{ "title": "string", "details": "string" }`
 - **`UpdateProductPayload`**: `{ "title": "string", "details": "string" }`
 
-### 6.2 Endpoints
+#### Endpoints
 
-#### `GET /`
+##### `GET /`
 
-- **Description:** Retrieves a list of all products.
+- **Description:** Retrieves a list of products, optionally filtered by title.
+- **Query param:** `filter` (optional) — case-insensitive substring match on the title (`LIKE '%filter%'`); when blank/absent, all products are returned.
+- **Access:** public (`permitAll()`).
 - **Response 200:** `[ { "id": 1, "title": "Product 1", "details": "..." }, ... ]`
 
-#### `POST /`
+##### `POST /`
 
 - **Description:** Creates a new product.
 - **Request Body:** `NewProductPayload`
+- **Access:** requires `SCOPE_edit_catalogue`.
 - **Response 201:** The newly created product object. `{ "id": 1, "title": "New Product", "details": "..." }`
 
-#### `GET /{productId}`
+##### `GET /{productId}`
 
 - **Description:** Retrieves a single product by its ID.
+- **Access:** public (`permitAll()`).
 - **Response 200:** A single product object.
 - **Response 404:** If no product with the given ID is found.
 
-#### `PATCH /{productId}`
+##### `PATCH /{productId}`
 
 - **Description:** Updates the details of an existing product.
 - **Request Body:** `UpdateProductPayload`
+- **Access:** requires `SCOPE_edit_catalogue`.
 - **Response 204:** No Content, on successful update.
 - **Response 404:** If no product with the given ID is found.
 
-#### `DELETE /{productId}`
+##### `DELETE /{productId}`
 
 - **Description:** Deletes a product by its ID.
+- **Access:** requires `SCOPE_edit_catalogue`.
 - **Response 204:** No Content, on successful deletion.
 - **Response 404:** If no product with the given ID is found.
 
-## 7. Frontend Design (`manager-app`)
+### 6.2 `feedback-service`
 
-The frontend is a classic server-side rendered application using Spring MVC and Thymeleaf.
+All endpoints are relative to the base path `/api/v1/feedback-api`. The service is reactive (returns `Mono`/`Flux`) and unsecured.
 
-### 7.1 URL Routes & Corresponding Templates
+#### Favourite Products — `/favourite-products`
+
+- **`GET /`** → `Flux<FavouriteProduct>` — lists all favourite products.
+- **`GET /by-product-id/{productId}`** → `Mono<FavouriteProduct>` — returns the favourite for a product (empty → 404 if none).
+- **`POST /`** → `Mono<ResponseEntity<FavouriteProduct>>` — adds a product to favourites. Body: `NewFavouriteProductPayload { "productId": 1 }`. Returns `201 Created` with a `Location` header.
+- **`DELETE /by-product-id/{productId}`** → `Mono<ResponseEntity<Void>>` — removes a product from favourites. Returns `204 No Content`.
+
+#### Product Reviews — `/product-reviews`
+
+- **`GET /by-product-id/{productId}`** → `Flux<ProductReview>` — lists reviews for a product.
+- **`POST /`** → `Mono<ResponseEntity<ProductReview>>` — creates a review. Body: `NewProductReviewPayload { "productId": 1, "rating": 5, "review": "..." }`. Returns `201 Created` with a `Location` header.
+
+#### Entities
+
+- **`FavouriteProduct`**: `{ "id": "uuid", "productId": 1 }`
+- **`ProductReview`**: `{ "id": "uuid", "productId": 1, "rating": 5, "review": "..." }`
+
+#### Validation & errors
+
+Request bodies are validated with Bean Validation (`@Valid @RequestBody Mono<...>`):
+- `NewFavouriteProductPayload.productId` — `@NotNull`.
+- `NewProductReviewPayload.productId` — `@NotNull`; `rating` — `@NotNull`, `@Min(1)`, `@Max(5)`; `review` — `@Size(max = 1000)`.
+
+Validation failures throw `WebExchangeBindException`, handled by `ExceptionHandlingControllerAdvice`, which returns `400 Bad Request` as `application/problem+json` with an `errors` array of localized messages (from `messages.properties`).
+
+## 7. Frontend Design
+
+### 7.1 Admin UI (`manager-app`)
+
+The admin frontend is a classic server-side rendered application using Spring MVC and Thymeleaf.
+
+#### URL Routes & Corresponding Templates
 
 - `GET /catalogue/products/list`
   - **Description:** Displays the list of all products.
@@ -228,13 +322,46 @@ The frontend is a classic server-side rendered application using Spring MVC and 
 - `POST /catalogue/products/{productId}/delete`
     - **Description:** Deletes the product and redirects to the product list.
 
-### 7.2 Client-Side Communication
+#### Client-Side Communication
 
 The `RestClientProductsRestClient` class encapsulates all logic for making HTTP calls to the `catalogue-service` REST API. It handles request creation, response parsing, and error translation. The underlying `RestClient` is built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that obtains an access token via the `OAuth2AuthorizedClientManager` and injects it as a Bearer token (client registration id and base URI configured under `selmag.services.catalogue.*`) into every outgoing request.
 
+### 7.2 Customer Storefront (`customer-app`)
+
+The customer storefront is a reactive, server-side rendered application using Spring WebFlux and reactive Thymeleaf.
+
+#### URL Routes & Corresponding Templates
+
+- `GET /customer/products/list`
+  - **Description:** Displays all products with an optional title `filter` query param. Links to favourites.
+  - **Template:** `customer/products/list.html`
+
+- `GET /customer/products/favourites`
+  - **Description:** Displays the favourite products (optionally filtered by title).
+  - **Template:** `customer/products/favourites.html`
+
+- `GET /customer/products/{productId}`
+  - **Description:** Displays a single product's details, its reviews, and favourite add/remove + review forms.
+  - **Template:** `customer/products/product.html`
+
+- `POST /customer/products/{productId}/add-to-favourites` — adds the product to favourites, redirects back to the product page.
+
+- `POST /customer/products/{productId}/remove-from-favourites` — removes the product from favourites, redirects back.
+
+- `POST /customer/products/{productId}/create-review` — submits a review; on validation error re-renders the product page with errors.
+
+#### Client-Side Communication
+
+The `customer-app` uses reactive `WebClient` clients (built in `ClientConfig`, base URLs `selmag.services.catalogue.uri` = `http://localhost:8081` and `selmag.services.feedback.uri` = `http://localhost:8084`):
+- `WebClientProductsClient` → `catalogue-service` (`/catalogue-api/products`).
+- `WebClientFavouriteProductsClient` → `feedback-service` (`/api/v1/feedback-api/favourite-products`).
+- `WebClientProductReviewsClient` → `feedback-service` (`/api/v1/feedback-api/product-reviews`).
+
+Each returns `Mono`/`Flux`; controllers compose them reactively (e.g. `collectList()`, `flatMap`, `thenReturn`) and return a `Mono<String>` view name. `WebClientResponseException.BadRequest` is translated into `ClientBadRequestException` carrying the server's validation `errors`.
+
 ## 8. Testing
 
-The project ships unit tests and Spring Boot integration tests across the two modules.
+The project ships unit tests and Spring Boot integration tests across the two blocking modules (`catalogue-service`, `manager-app`). The reactive modules (`customer-app`, `feedback-service`) have no tests yet.
 
 ### 8.1 Unit tests (`manager-app`)
 
@@ -245,14 +372,15 @@ The project ships unit tests and Spring Boot integration tests across the two mo
 Integration tests use `@SpringBootTest` with `@AutoConfigureMockMvc` (Spring Boot 4.0 package `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`) to exercise the web layer end-to-end without a live server.
 
 - **`catalogue-service` — `ProductsRestControllerIT`:** boots against an embedded Testcontainers PostgreSQL (datasource URL `jdbc:tc:postgresql:...` in `src/test/resources/application.yml`), seeds data with `@Sql("/sql/products.sql")`, and rolls back each test via `@Transactional`. The JWT is simulated with `SecurityMockMvcRequestPostProcessors.jwt()` and a mocked `JwtDecoder` (`TestingBeans`).
-- **`manager-app` — `ProductsControllerIT`:** boots with the `standalone` profile (relies on the local `manager` database) and simulates a signed-in user with `SecurityMockMvcRequestPostProcessors.user().roles("MANAGER")`. The OAuth2 client beans (`ClientRegistrationRepository`, `OAuth2AuthorizedClientRepository`) are mocked in `TestingBeans`.
+- **`manager-app` — `ProductsControllerIT`:** boots with the `standalone` profile (relies on the local `manager` database) and simulates a signed-in user with `SecurityMockMvcRequestPostProcessors.user().roles("MANAGER")`. The OAuth2 client beans (`ClientRegistrationRepository`, `OAuth2AuthorizedClientRepository`) are mocked in `TestingBeans`, and `catalogue-service` is stubbed with WireMock.
 
 ### 8.3 Test dependencies
 
 - `org.springframework.boot:spring-boot-starter-test` (test)
 - `org.springframework.boot:spring-boot-starter-webmvc-test` (test) — provides `@AutoConfigureMockMvc`
 - `org.springframework.security:spring-security-test` (test)
-- `org.testcontainers:testcontainers-postgresql` (test, `catalogue-service`)
+- `org.testcontainers:testcontainers-postgresql` (test, `catalogue-service`, `manager-app`)
+- `org.wiremock:wiremock-standalone` (test, `manager-app`)
 
 ### 8.4 Testcontainers (`catalogue-service`)
 
@@ -276,9 +404,14 @@ The `catalogue-service` integration tests run against an ephemeral PostgreSQL co
 1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. The system uses two separate databases:
     - `catalogue` (port `5432`), user `catalogue` / password `catalogue` — used by `catalogue-service`.
     - `manager` (port `5433`), user `manager` / password `manager` — used by `manager-app` for user management.
+    - `feedback-service` needs no database (in-memory).
 2.  **Keycloak Setup:** Start Keycloak (`selmag-keycloak`, port `8082`, realm `selmag`). See `README.MD` for the `docker run` command and `config/keycloak/import/realm-export.json` for the realm configuration.
-3.  **Build Project:** From the project root, run `./mvnw clean install` to build both modules.
-4.  **Run Backend Service:** Navigate to the `catalogue-service` directory and run `../mvnw spring-boot:run`. The service will start on port `8081` and Flyway will apply database migrations.
-5.  **Run Frontend Application:** In a new terminal, navigate to the `manager-app` directory and run `../mvnw spring-boot:run`. The web application will start on port `8080`.
-6.  **Access UI:** Open a web browser and go to `http://localhost:8080/catalogue/products/list` (you will be redirected to Keycloak to sign in).
-7.  **Run Tests:** From the project root, run `./mvnw test` to run all tests. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.
+3.  **Build Project:** From the project root, run `./mvnw clean install` to build all four modules.
+4.  **Run Backend Service:** Run `./mvnw -pl catalogue-service spring-boot:run` (port `8081`; Flyway applies database migrations).
+5.  **Run Feedback Service:** Run `./mvnw -pl feedback-service spring-boot:run` (port `8084`).
+6.  **Run Admin Frontend:** Run `./mvnw -pl manager-app spring-boot:run` (port `8080`).
+7.  **Run Customer Storefront:** Run `./mvnw -pl customer-app spring-boot:run` (port `8083`).
+8.  **Access UI:**
+    - Admin: `http://localhost:8080/catalogue/products/list` (redirected to Keycloak to sign in).
+    - Customer storefront: `http://localhost:8083/customer/products/list` (public).
+9.  **Run Tests:** From the project root, run `./mvnw test` to run all tests. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.

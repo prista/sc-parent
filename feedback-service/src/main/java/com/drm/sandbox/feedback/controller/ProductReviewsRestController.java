@@ -5,11 +5,17 @@ import com.drm.sandbox.feedback.entity.ProductReview;
 import com.drm.sandbox.feedback.service.ProductReviewsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import static org.springframework.data.mongodb.core.query.Criteria.where;
+import static org.springframework.data.mongodb.core.query.Query.query;
 
 @RestController
 @RequestMapping("/api/v1/feedback-api/product-reviews")
@@ -17,12 +23,16 @@ import reactor.core.publisher.Mono;
 public class ProductReviewsRestController {
 
     private final ProductReviewsService productReviewsService;
+    private final ReactiveMongoTemplate reactiveMongoTemplate;
 
     // The \\d+ regex restricts the path variable to digits,
     // so non-numeric IDs fail to match the route (404) instead of hitting type conversion (400).
     @GetMapping("by-product-id/{productId:\\d+}")
     public Flux<ProductReview> findProductReviewsByProductId(@PathVariable("productId") int productId) {
-        return this.productReviewsService.findProductReviewsByProduct(productId);
+        //return this.productReviewsService.findProductReviewsByProduct(productId);
+        return reactiveMongoTemplate
+                .find(query(where("productId").is(productId)),
+                        ProductReview.class);
     }
 
     @PostMapping
