@@ -26,7 +26,9 @@ A web application for managing a product catalogue and collecting customer feedb
   - Java 21 & Spring Boot
   - Spring WebFlux (reactive REST)
   - Reactor (`Mono`/`Flux`)
-  - In-memory repositories (no database)
+  - Spring Data MongoDB (reactive)
+  - MongoDB
+  - Spring Security (OAuth2 resource server, JWT)
   - Bean Validation (`jakarta.validation`)
   - Maven
 - **Admin Frontend (`manager-app`):**
@@ -52,9 +54,9 @@ A web application for managing a product catalogue and collecting customer feedb
 The application follows a distributed, four-service model plus a third-party identity provider:
 
 - **`catalogue-service`:** A stateless backend service that exposes a RESTful API. It is the single source of truth for all product data and contains all business logic related to product management. It acts as an OAuth2 **resource server**: it validates JWT access tokens (issued by Keycloak). Reads (`GET`) are public (`permitAll()`), while writes (`POST`/`PATCH`/`DELETE`) require the `SCOPE_edit_catalogue` authority.
-- **`feedback-service`:** A reactive (WebFlux) backend service that stores product feedback — favourite products and product reviews — in **in-memory repositories** (no database). It exposes a reactive REST API under `/api/v1/feedback-api/**` and is currently unsecured.
+- **`feedback-service`:** A reactive (WebFlux) backend service that stores product feedback — favourite products and product reviews — in **MongoDB**. It exposes a reactive REST API under `/api/v1/feedback-api/**` and acts as an OAuth2 **resource server**: it validates JWT access tokens (issued by Keycloak) and requires authentication on **every** exchange (`anyExchange().authenticated()`). Unlike `catalogue-service` it has no public endpoints and no scope-based rules — a valid realm token is enough.
 - **`manager-app`:** A server-side rendered (Spring MVC) web application that serves an admin interface for managing products. It is an OAuth2 **client** of the `catalogue-service`: end users authenticate against Keycloak (`oauth2Login`), and each service-to-service call to `catalogue-service` carries a Bearer access token obtained via the OAuth2 client.
-- **`customer-app`:** A reactive (WebFlux), server-side rendered storefront. It is **public** (no authentication) and communicates with `catalogue-service` (products) and `feedback-service` (favourites/reviews) through reactive `WebClient` clients.
+- **`customer-app`:** A reactive (WebFlux), server-side rendered storefront. It is **public** (no authentication) and communicates with `catalogue-service` (products) and `feedback-service` (favourites/reviews) through reactive `WebClient` clients. It has no OAuth2 client of its own yet, so only the public `catalogue-service` reads work — the `feedback-service` calls now need a token.
 - **`Keycloak`:** The identity/authorization provider (realm `selmag`). It authenticates users, issues access tokens, and defines the realm roles (`ROLE_MANAGER`, `ROLE_CUSTOMER`), groups (`managers`, `customers`) and client scopes (`view_catalogue`, `edit_catalogue`) used across the system.
 
 ### 2.2 Application Layers
@@ -71,22 +73,23 @@ The application follows a distributed, four-service model plus a third-party ide
 
 **Client & API Layer**
 - `manager-app` → `catalogue-service`: the `ProductsRestClient` (`RestClientProductsRestClient`) uses a blocking `RestClient` built in `ClientBeans` with an `OAuthClientHttpRequestInterceptor` that, on every outgoing request, obtains an OAuth2 access token via the `OAuth2AuthorizedClientManager` (client registration `keycloak`) and attaches it as a Bearer token.
-- `customer-app` → `catalogue-service` / `feedback-service`: reactive `WebClient` clients (`WebClientProductsClient`, `WebClientFavouriteProductsClient`, `WebClientProductReviewsClient`) built in `ClientConfig` (base URLs `selmag.services.catalogue.uri` and `selmag.services.feedback.uri`). They consume `Mono`/`Flux` and translate `WebClientResponseException` errors into `ClientBadRequestException` / empty results.
+- `customer-app` → `catalogue-service` / `feedback-service`: reactive `WebClient` clients (`WebClientProductsClient`, `WebClientFavouriteProductsClient`, `WebClientProductReviewsClient`) built in `ClientConfig` (base URLs `selmag.services.catalogue.uri` and `selmag.services.feedback.uri`). They consume `Mono`/`Flux` and translate `WebClientResponseException` errors into `ClientBadRequestException` / empty results. The clients attach **no** `Authorization` header — reading products still works (`GET` on `catalogue-service` is public), but the calls to the now-secured `feedback-service` are rejected with `401`.
 - `catalogue-service` provides a formal REST API contract at `/catalogue-api/products`; `feedback-service` at `/api/v1/feedback-api/**`.
 
 **Security Layer**
 - `catalogue-service` secures its API as an OAuth2 resource server (`SecurityConfig`): `GET /catalogue-api/**` is `permitAll()` (no token required), while `POST`/`PATCH`/`DELETE` require `SCOPE_edit_catalogue`. Everything else is denied (`denyAll()`).
 - `manager-app` enables `oauth2Login` and `oauth2Client` (`SecurityConfig`). A custom `OAuth2UserService` flattens the user's authorities from the ID token together with `groups`-claim entries prefixed with `ROLE_`; all UI requests require the `ROLE_MANAGER` role.
-- `customer-app` and `feedback-service` are currently unsecured (no Spring Security configured).
+- `feedback-service` secures its API as an OAuth2 resource server too (`config/SecurityConfig`), but in its **reactive** form: `ServerHttpSecurity` + `SecurityWebFilterChain` instead of `HttpSecurity` + `SecurityFilterChain`, `authorizeExchange(...)` instead of `authorizeHttpRequests(...)`, and `NoOpServerSecurityContextRepository.getInstance()` instead of `SessionCreationPolicy.STATELESS`. The rule is `anyExchange().authenticated()` — there is no public endpoint and no `SCOPE_*` check — with CSRF disabled.
+- `customer-app` is still unsecured (no Spring Security configured; its storefront UI is public by design) *and* has no OAuth2 client, so it currently cannot call the secured `feedback-service`.
 
 **Service Layer**
 - `catalogue-service` (`DefaultProductService`): core product business logic — validation, persistence, and the optional title `filter`.
-- `feedback-service` (`DefaultFavouriteProductsService`, `DefaultProductReviewsService`): favourite/review business logic over the in-memory repositories.
+- `feedback-service` (`DefaultFavouriteProductsService`, `DefaultProductReviewsService`): favourite/review business logic over the reactive MongoDB repositories.
 
 **Data Access Layer**
 - `catalogue-service`: Spring Data JPA repository (`ProductRepository`) over the `catalogue` schema.
 - `manager-app`: Spring Data JPA repository (`UserRepository`) over the `user_management` schema.
-- `feedback-service`: in-memory repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`) — no database, data is lost on restart.
+- `feedback-service`: reactive Spring Data MongoDB repositories (`FavouriteProductRepository`, `ProductReviewRepository`, both `ReactiveCrudRepository`) over the `feedback` database on `mongodb://localhost:27017`; the `UUID` `_id` encoding is configured in `MongoConfig`.
 - Flyway manages the evolution of the PostgreSQL schemas (`catalogue`, `manager`) through SQL migration scripts.
 
 ### 2.3 OAuth2 / Keycloak Scheme
@@ -95,7 +98,8 @@ The system delegates authentication and authorization to **Keycloak** (realm `se
 
 - **End-user authentication (`manager-app` → browser):** `oauth2Login` redirects unauthenticated users to Keycloak. After the authorization-code flow completes, the user's authorities are built from the ID token plus the `groups` claim (only entries prefixed with `ROLE_` are kept, mapped to `SimpleGrantedAuthority`). The whole admin UI is gated by `ROLE_MANAGER`.
 - **Service-to-service (`manager-app` → `catalogue-service`):** the client registration `keycloak` (client id `manager-app`) requests scopes `openid`, `view_catalogue`, `edit_catalogue`, `microprofile-jwt`. `OAuthClientHttpRequestInterceptor` uses an `OAuth2AuthorizedClientManager` to obtain an access token for the current principal and sends it as `Authorization: Bearer …`. `catalogue-service` validates the token against the Keycloak issuer and checks the `SCOPE_*` authorities declared in `SecurityConfig` for write endpoints.
-- **Reads are public:** `catalogue-service` marks `GET /catalogue-api/**` as `permitAll()`. This lets the token-less `customer-app` browse products without any OAuth2 client configuration; only the `manager-app` performs OAuth2.
+- **Reactive resource server (`feedback-service`):** the same Keycloak issuer is configured via `spring.security.oauth2.resourceserver.jwt.issuer-uri`, so `feedback-service` validates the very same access tokens and requires an authenticated principal on **every** exchange. It does not check `SCOPE_*` — any valid token from the realm is accepted. Keycloak must therefore be reachable: the decoder resolves the realm's OIDC metadata from `/.well-known/openid-configuration`, and when Keycloak is down the decoder cannot be initialized (the failure surfaces either at startup or on the first token decode, depending on the version) — the service never falls back to running unsecured.
+- **Reads are public — but only in `catalogue-service`:** `catalogue-service` marks `GET /catalogue-api/**` as `permitAll()`, which lets the token-less `customer-app` browse products without any OAuth2 client configuration. `feedback-service` is deliberately stricter and has no `permitAll()`, so `customer-app` cannot read favourites/reviews until it obtains a token. Only `manager-app` performs OAuth2 today.
 - **Realm configuration:** roles `ROLE_MANAGER` / `ROLE_CUSTOMER`; groups `managers` / `customers` (each group maps to its realm role); client scopes `view_catalogue`, `edit_catalogue`, and `microprofile-jwt` (with `upn` and `groups` protocol mappers). Note the `groups` mapper is actually an `oidc-usermodel-realm-role-mapper`, so the `groups` claim carries the user's **realm roles** (`ROLE_MANAGER`, …) — this is what the app's `OAuth2UserService` filters on. The realm is exported at `config/keycloak/import/realm-export.json` and imported by the Keycloak container.
 
 ## 3. Functional Requirements
@@ -123,7 +127,7 @@ The API provides endpoints for full CRUD functionality on products, plus title-b
 
 ### 3.4 Feedback API (`feedback-service`)
 
-The reactive API stores and returns favourites and reviews. Data lives in in-memory repositories, so it resets on restart.
+The reactive API stores and returns favourites and reviews in MongoDB. It is secured as an OAuth2 resource server: **every** endpoint requires a valid JWT (no public access, no scope check).
 
 ## 4. Non-Functional Requirements
 
@@ -136,10 +140,11 @@ The reactive API stores and returns favourites and reviews. Data lives in in-mem
 **Security**
 - Service-to-service communication between `manager-app` and `catalogue-service` is protected with OAuth2. `catalogue-service` acts as a resource server, restricting write endpoints (`POST`/`PATCH`/`DELETE` on `/catalogue-api/**`) to requests carrying a valid JWT with `SCOPE_edit_catalogue`; `manager-app` attaches a Bearer token via `OAuthClientHttpRequestInterceptor`. `GET` endpoints are public.
 - End-user authentication for the admin web UI is handled by Keycloak through `oauth2Login`; the whole admin UI requires the `ROLE_MANAGER` role. A custom `OAuth2UserService` merges ID-token authorities with `ROLE_`-prefixed entries from the `groups` claim.
-- `customer-app` and `feedback-service` are currently unsecured.
+- `feedback-service` is an OAuth2 resource server as well (`config/SecurityConfig`), but stricter than the catalogue: `anyExchange().authenticated()` means every endpoint needs a valid JWT and no `SCOPE_*` authority is required. As `customer-app` sends no token yet, its favourite/review calls currently fail with `401` — adding an OAuth2 client to `customer-app` is the outstanding piece of work.
+- `customer-app` itself is still unsecured (no Spring Security configured); its storefront UI is public by design.
 - The `user_management` schema, `UserRepository`, `User`/`Authority` entities and `MUserDetailService` are retained from the earlier HTTP-Basic / DB-backed auth approach and are no longer wired into the active security filter chain.
 
-## 5. Data Model & Database Schema (PostgreSQL)
+## 5. Data Model & Database Schema
 
 ### 5.1 Tables
 
@@ -194,9 +199,9 @@ create table user_management.t_user_2_authority (
 | `t_authority`          | Authority/role values (`c_authority`).                      |
 | `t_user_2_authority`   | Many-to-many join between users and authorities.            |
 
-### 5.3 `feedback-service` — in-memory storage
+### 5.3 `feedback-service` — MongoDB storage
 
-The `feedback-service` has no database. It stores `FavouriteProduct` and `ProductReview` records in `Collections.synchronizedList`-backed repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`). All data is lost when the service restarts.
+The `feedback-service` does not use PostgreSQL at all. It stores `FavouriteProduct` and `ProductReview` documents in MongoDB (`mongodb://localhost:27017/feedback`) through two reactive repositories, `FavouriteProductRepository` and `ProductReviewRepository` (both extend `ReactiveCrudRepository`, returning `Mono`/`Flux`). There is no schema and no Flyway; Spring Data derives the collections from the entity class names (`productReview`, `favouriteProduct`). See `MONGO.md` for a walkthrough of the Mongo model.
 
 ### 5.4 MongoDB UUID Representation (`feedback-service`)
 
@@ -262,7 +267,7 @@ All endpoints are relative to the base path `/catalogue-api/products`.
 
 ### 6.2 `feedback-service`
 
-All endpoints are relative to the base path `/api/v1/feedback-api`. The service is reactive (returns `Mono`/`Flux`) and unsecured.
+All endpoints are relative to the base path `/api/v1/feedback-api`. The service is reactive (returns `Mono`/`Flux`) and secured as an OAuth2 resource server: **every** request below requires an `Authorization: Bearer <JWT>` header carrying a token issued by the Keycloak realm `selmag`, otherwise the service answers `401 Unauthorized`. No specific scope is required.
 
 #### Favourite Products — `/favourite-products`
 
@@ -361,7 +366,7 @@ Each returns `Mono`/`Flux`; controllers compose them reactively (e.g. `collectLi
 
 ## 8. Testing
 
-The project ships unit tests and Spring Boot integration tests across the two blocking modules (`catalogue-service`, `manager-app`). The reactive modules (`customer-app`, `feedback-service`) have no tests yet.
+The project ships unit tests and Spring Boot integration tests across the two blocking modules (`catalogue-service`, `manager-app`), plus controller unit tests in `customer-app` (`ProductsControllerTest`, `ProductControllerTest`). `feedback-service` has no tests yet.
 
 ### 8.1 Unit tests (`manager-app`)
 
@@ -404,11 +409,11 @@ The `catalogue-service` integration tests run against an ephemeral PostgreSQL co
 1.  **Database Setup:** Ensure a PostgreSQL instance is running and accessible. The system uses two separate databases:
     - `catalogue` (port `5432`), user `catalogue` / password `catalogue` — used by `catalogue-service`.
     - `manager` (port `5433`), user `manager` / password `manager` — used by `manager-app` for user management.
-    - `feedback-service` needs no database (in-memory).
-2.  **Keycloak Setup:** Start Keycloak (`selmag-keycloak`, port `8082`, realm `selmag`). See `README.MD` for the `docker run` command and `config/keycloak/import/realm-export.json` for the realm configuration.
+    - `feedback-service` uses MongoDB instead — `mongodb://localhost:27017/feedback` (`docker run --name feedback-db -p 27017:27017 mongo:8`).
+2.  **Keycloak Setup:** Start Keycloak (`selmag-keycloak`, port `8082`, realm `selmag`). See `README.MD` for the `docker run` command and `config/keycloak/import/realm-export.json` for the realm configuration. Keycloak is required by **three** services now: `manager-app` (login), and both resource servers — `catalogue-service` and `feedback-service` — which resolve `issuer-uri` at startup. If Keycloak is unreachable, `feedback-service` cannot initialise its JWT decoder (the error shows up at startup or on the first request, depending on the version) — it never falls back to running unsecured.
 3.  **Build Project:** From the project root, run `./mvnw clean install` to build all four modules.
 4.  **Run Backend Service:** Run `./mvnw -pl catalogue-service spring-boot:run` (port `8081`; Flyway applies database migrations).
-5.  **Run Feedback Service:** Run `./mvnw -pl feedback-service spring-boot:run` (port `8084`).
+5.  **Run Feedback Service:** Run `./mvnw -pl feedback-service spring-boot:run` (port `8084`; needs MongoDB and Keycloak running). Its endpoints now require a Bearer token — without one every call returns `401`.
 6.  **Run Admin Frontend:** Run `./mvnw -pl manager-app spring-boot:run` (port `8080`).
 7.  **Run Customer Storefront:** Run `./mvnw -pl customer-app spring-boot:run` (port `8083`).
 8.  **Access UI:**

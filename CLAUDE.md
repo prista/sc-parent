@@ -10,15 +10,15 @@ When working with third-party libraries, always consult official documentation t
 
 - **Build Project:** `./mvnw clean install` (from project root; builds all four modules)
 - **Executable JAR:** each service's `spring-boot-maven-plugin` (`repackage` goal) bundles the app and its dependencies into a self-contained executable JAR runnable via `java -jar`, excludes Lombok, and adds the `-exec` classifier.
-- **Run Tests:** `./mvnw test` (from project root; runs all four modules). For a single test class: `./mvnw -pl catalogue-service -Dtest=ProductsRestControllerIT test`. The `catalogue-service` and `manager-app` integration tests use Testcontainers, so Docker must be running; `customer-app` and `feedback-service` have no tests yet.
+- **Run Tests:** `./mvnw test` (from project root; runs all four modules). For a single test class: `./mvnw -pl catalogue-service -Dtest=ProductsRestControllerIT test`. The `catalogue-service` and `manager-app` integration tests use Testcontainers, so Docker must be running; `customer-app` has controller unit tests, `feedback-service` has none yet.
 - **Testcontainers (tests):** the `catalogue-service` integration tests start an ephemeral PostgreSQL container (`postgres:17.4-alpine`) via the `jdbc:tc:postgresql:...` JDBC URL in `catalogue-service/src/test/resources/application.yml`; `TC_DAEMON=true` keeps the container running and reused across test runs. The same applies to `manager-app/src/test/resources/application.yml`.
 - **Run `manager-app`:** `./mvnw -pl manager-app spring-boot:run` (from project root, starts on port `8080`)
 - **Run `catalogue-service`:** `./mvnw -pl catalogue-service spring-boot:run` (from project root, starts on port `8081`)
 - **Run `customer-app`:** `./mvnw -pl customer-app spring-boot:run` (from project root, starts on port `8083`)
 - **Run `feedback-service`:** `./mvnw -pl feedback-service spring-boot:run` (from project root, starts on port `8084`)
 - **Access UI:** manager UI `http://localhost:8080/catalogue/products/list` (requires Keycloak sign-in); customer storefront `http://localhost:8083/customer/products/list` (public).
-- **Database:** Two PostgreSQL databases are required — `catalogue` (port `5432`, user `catalogue`/`catalogue`) for `catalogue-service`, and `manager` (port `5433`, user `manager`/`manager`) for `manager-app`. See `README.MD` for `docker run` commands. `feedback-service` uses in-memory storage (no database).
-- **Keycloak:** Required for OAuth2 — run `selmag-keycloak` on port `8082` (realm `selmag`). See `README.MD` for the `docker run` command; realm config is at `config/keycloak/import/realm-export.json`.
+- **Database:** Two PostgreSQL databases are required — `catalogue` (port `5432`, user `catalogue`/`catalogue`) for `catalogue-service`, and `manager` (port `5433`, user `manager`/`manager`) for `manager-app`. See `README.MD` for `docker run` commands. `feedback-service` uses MongoDB instead (`mongodb://localhost:27017/feedback`).
+- **Keycloak:** Required for OAuth2 — run `selmag-keycloak` on port `8082` (realm `selmag`). See `README.MD` for the `docker run` command; realm config is at `config/keycloak/import/realm-export.json`. Needed by `manager-app` (login) and by both resource servers, which resolve their JWT decoder from the realm issuer — with Keycloak down they cannot authenticate anything (and never fall back to running unsecured).
 
 ## Architecture
 
@@ -26,8 +26,8 @@ This is a multi-module Spring Boot application comprised of four services plus K
 
 - **`catalogue-service`**: A backend REST API for product management. Stateless single source of truth for product data; exposes REST at `/catalogue-api/products`. OAuth2 **resource server** — validates JWT access tokens against the Keycloak issuer. Reads (`GET`) are public (`permitAll()`); writes (`POST`/`PATCH`/`DELETE`) require `SCOPE_edit_catalogue`.
 - **`manager-app`**: A server-side rendered (Spring MVC) admin UI, acting as an OAuth2 **client** to the `catalogue-service`. End users sign in via Keycloak (`oauth2Login`); outgoing service-to-service calls attach a Bearer access token (`OAuthClientHttpRequestInterceptor`).
-- **`feedback-service`**: A reactive (WebFlux) REST API for product feedback — favourite products and product reviews — backed by **in-memory repositories** (no database). Exposes `/api/v1/feedback-api/**`; unsecured.
-- **`customer-app`**: A reactive (WebFlux) server-side rendered storefront (reactive Thymeleaf). A public, unauthenticated UI; it calls `catalogue-service` (products) and `feedback-service` (favourites/reviews) via reactive `WebClient` clients.
+- **`feedback-service`**: A reactive (WebFlux) REST API for product feedback — favourite products and product reviews — backed by **MongoDB** (`spring-boot-starter-data-mongodb-reactive`). Exposes `/api/v1/feedback-api/**`. OAuth2 **resource server** — validates JWT access tokens against the Keycloak issuer and requires authentication on **every** exchange (`anyExchange().authenticated()`, no `SCOPE_*` check), stateless, CSRF disabled.
+- **`customer-app`**: A reactive (WebFlux) server-side rendered storefront (reactive Thymeleaf). A public, unauthenticated UI; it calls `catalogue-service` (products) and `feedback-service` (favourites/reviews) via reactive `WebClient` clients. It has no OAuth2 client and sends no token, so its calls to the secured `feedback-service` currently return `401` — wiring that up is the outstanding piece of work on this branch.
 - **`Keycloak`**: Authorization server / identity provider (realm `selmag`, issuer `http://localhost:8082/realms/selmag`). Realm config is exported at `config/keycloak/import/realm-export.json`.
 
 ### OAuth2 flow
@@ -36,8 +36,9 @@ This is a multi-module Spring Boot application comprised of four services plus K
 2. `manager-app` resolves the user's authorities from the ID token and the `groups` claim (only `ROLE_`-prefixed entries); all UI routes require `ROLE_MANAGER`.
 3. `manager-app` → `catalogue-service`: `OAuthClientHttpRequestInterceptor` obtains a client access token (registration `keycloak`, scopes `view_catalogue`/`edit_catalogue`) and sends it as `Authorization: Bearer …`.
 4. `catalogue-service` validates the JWT and checks the `SCOPE_*` authorities declared in its `SecurityConfig`.
+5. `feedback-service` is a second resource server: it validates the same Keycloak-issued JWTs against the same issuer (`spring.security.oauth2.resourceserver.jwt.issuer-uri`), but its rule is `anyExchange().authenticated()` — every endpoint needs a token and no scope is checked. The reactive equivalent of the servlet config: `ServerHttpSecurity`/`SecurityWebFilterChain`, `authorizeExchange`, `NoOpServerSecurityContextRepository`.
 
-`customer-app` sits outside this flow: it is an unauthenticated storefront, and `catalogue-service` serves its `GET` endpoints publicly (`permitAll()`), so no token is needed to read products.
+`customer-app` sits outside this flow: it is an unauthenticated storefront, and `catalogue-service` serves its `GET` endpoints publicly (`permitAll()`), so no token is needed to read products. `feedback-service` deliberately has no public endpoint, so `customer-app`'s favourite/review calls fail with `401` until it gets an OAuth2 client of its own.
 
 ### Tech Stack
 
@@ -46,17 +47,18 @@ This is a multi-module Spring Boot application comprised of four services plus K
 - **Build Tool:** Maven
 - **Blocking (MVC):** `manager-app` (Spring MVC + Thymeleaf) and `catalogue-service` (Spring MVC REST) — Spring Web + `RestClient`.
 - **Reactive (WebFlux):** `customer-app` (WebFlux + reactive Thymeleaf) and `feedback-service` (WebFlux REST) — Reactor (`Mono`/`Flux`) + reactive `WebClient`.
-- **Database:** PostgreSQL (two separate databases, managed by Flyway for migrations) for `catalogue-service` and `manager-app`; `feedback-service` is in-memory.
+- **Database:** PostgreSQL (two separate databases, managed by Flyway for migrations) for `catalogue-service` and `manager-app`; MongoDB (reactive, schema-less) for `feedback-service`.
 - **Templating (Frontend):** Thymeleaf
-- **Security:** Spring Security — OAuth2 resource server (JWT) in `catalogue-service`; OAuth2 login + client in `manager-app`; Keycloak as IdP
+- **Security:** Spring Security — OAuth2 resource server (JWT) in `catalogue-service` (servlet: `HttpSecurity`/`SecurityFilterChain`) and in `feedback-service` (reactive: `ServerHttpSecurity`/`SecurityWebFilterChain`); OAuth2 login + client in `manager-app`; Keycloak as IdP
 
 ### Key Dependencies
 
 - `org.springframework.boot:spring-boot-starter-web` (`catalogue-service`, `manager-app`)
 - `org.springframework.boot:spring-boot-starter-webflux` (`customer-app`, `feedback-service`)
 - `org.springframework.boot:spring-boot-starter-data-jpa`
+- `org.springframework.boot:spring-boot-starter-data-mongodb-reactive` (`feedback-service`)
 - `org.springframework.boot:spring-boot-starter-security`
-- `org.springframework.boot:spring-boot-starter-oauth2-resource-server` (`catalogue-service`)
+- `org.springframework.boot:spring-boot-starter-oauth2-resource-server` (`catalogue-service`, `feedback-service`)
 - `org.springframework.boot:spring-boot-starter-oauth2-client` (`manager-app`)
 - `org.springframework.boot:spring-boot-starter-validation` (`catalogue-service`, `feedback-service`)
 - `org.springframework.boot:spring-boot-starter-flyway`
@@ -100,9 +102,12 @@ This is a multi-module Spring Boot application comprised of four services plus K
   - `src/main/java/com/drm/sandbox/customer/controller/` - `ProductsController`, `ProductController` (return `Mono<String>` view names)
   - `src/main/java/com/drm/sandbox/customer/entity/` - records `Product`, `FavouriteProduct`, `ProductReview`
   - `src/main/resources/templates/customer/products/` - Thymeleaf templates (`list.html`, `favourites.html`, `product.html`)
+  - `src/test/java/com/drm/sandbox/customer/controller/` - controller unit tests (`ProductsControllerTest`, `ProductControllerTest`)
 - `feedback-service/` - Feedback REST API module (reactive WebFlux)
   - `src/main/java/com/drm/sandbox/feedback/` - Java source
   - `src/main/java/com/drm/sandbox/feedback/controller/` - `FavouriteProductsRestController`, `ProductReviewsRestController`, `ExceptionHandlingControllerAdvice` (validation errors → `ProblemDetail`)
   - `src/main/java/com/drm/sandbox/feedback/service/` - `FavouriteProductsService` / `ProductReviewsService` interfaces + `Default*` implementations
-  - `src/main/java/com/drm/sandbox/feedback/repository/` - in-memory repositories (`InMemoryFavouriteProductRepository`, `InMemoryProductReviewRepository`)
+  - `src/main/java/com/drm/sandbox/feedback/repository/` - reactive Spring Data MongoDB repositories (`FavouriteProductRepository`, `ProductReviewRepository`)
+  - `src/main/java/com/drm/sandbox/feedback/config/` - `SecurityConfig` (reactive OAuth2 resource server), `MongoConfig` (`UuidRepresentation.STANDARD`)
   - `src/main/java/com/drm/sandbox/feedback/entity/` - `FavouriteProduct`, `ProductReview`
+  - `src/main/resources/application-standalone.yml` - port `8084`, MongoDB URI, Keycloak `issuer-uri`
