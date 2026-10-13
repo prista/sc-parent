@@ -4,3 +4,21 @@ selmag:
       uri: http://localhost:8081
 server:
   port: 8083
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
+            user-name-attribute: preferred_username
+        # Единственный registration: authorization_code + token relay — токен юзера
+        # пересылается вниз по цепочке, поэтому client_credentials не нужен.
+        registration:
+          keycloak:
+            client-id: customer-app
+            client-secret: vKR4vMsL2JtUMh9dN7adffMqY4Qn109m
+            authorization-grant-type: authorization_code
+            scope:
+              - openid
+              - view_catalogue
