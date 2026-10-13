@@ -321,6 +321,7 @@
       "manager-app": [],
       "security-admin-console": [],
       "admin-cli": [],
+      "customer-app": [],
       "account-console": [],
       "broker": [
         {
@@ -500,6 +501,22 @@
   "webAuthnPolicyPasswordlessAcceptableAaguids": [],
   "webAuthnPolicyPasswordlessExtraOrigins": [],
   "users": [
+    {
+      "id": "6f85e84c-99cf-4ac2-b51c-71f22dc6b12e",
+      "username": "service-account-customer-app",
+      "emailVerified": false,
+      "createdTimestamp": 1791546165738,
+      "enabled": true,
+      "totp": false,
+      "serviceAccountClientId": "customer-app",
+      "disableableCredentialTypes": [],
+      "requiredActions": [],
+      "realmRoles": [
+        "default-roles-selmag"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
     {
       "id": "70647b10-a1fd-401f-a72e-a0cff0f704b5",
       "username": "service-account-manager-app",
@@ -724,6 +741,63 @@
         "phone",
         "offline_access",
         "organization",
+        "microprofile-jwt"
+      ]
+    },
+    {
+      "id": "a393e9ac-fb77-4ff2-a006-8848f1584da0",
+      "clientId": "customer-app",
+      "name": "",
+      "description": "",
+      "rootUrl": "http://localhost:8083",
+      "adminUrl": "http://localhost:8083",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "**********",
+      "redirectUris": [
+        "/*"
+      ],
+      "webOrigins": [],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "client.secret.creation.time": "1791546165",
+        "backchannel.logout.session.required": "true",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "service_account",
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "edit_catalogue",
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "view_catalogue",
         "microprofile-jwt"
       ]
     },
