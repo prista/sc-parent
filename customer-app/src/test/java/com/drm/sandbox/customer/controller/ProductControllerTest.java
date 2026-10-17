@@ -38,7 +38,24 @@ class ProductControllerTest {
     ProductReviewsClient productReviewsClient;
 
     @InjectMocks
-    ProductController controller;
+    ProductController underTest;
+
+    @Test
+    void handleNoSuchElementException_Returns404ErrorPage() {
+        // given
+        var exception = new NoSuchElementException("customer.products.error.not_found");
+        var model = new ConcurrentModel();
+
+        // when
+        var result = this.underTest.handleNoSuchElementException(exception, model);
+
+        // then
+        assertEquals("errors/404", result);
+        assertEquals("customer.products.error.not_found", model.getAttribute("error"));
+
+        verifyNoInteractions(this.productsClient, this.favouriteProductsClient,
+                this.productReviewsClient);
+    }
 
     @Test
     void loadProduct_ProductExists_ReturnsProduct() {
@@ -48,11 +65,11 @@ class ProductControllerTest {
         doReturn(Mono.just(product)).when(this.productsClient).findProduct(1);
 
         // when
-        var result = this.controller.loadProduct(1);
+        var result = this.underTest.loadProduct(1);
 
         // then
-        StepVerifier.create(result)
-                .expectNext(product)
+        StepVerifier.create(result) // creates stream to test
+                .expectNext(product) // expects the product to be emitted
                 .verifyComplete();
 
         verify(this.productsClient).findProduct(1);
@@ -65,7 +82,7 @@ class ProductControllerTest {
         doReturn(Mono.empty()).when(this.productsClient).findProduct(1);
 
         // when
-        var result = this.controller.loadProduct(1);
+        var result = this.underTest.loadProduct(1);
 
         // then
         StepVerifier.create(result)
@@ -94,7 +111,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).findFavouriteProductByProductId(1);
 
         // when
-        var result = this.controller.getProductPage(1, model);
+        var result = this.underTest.getProductPage(1, model);
 
         // then
         StepVerifier.create(result)
@@ -122,7 +139,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).findFavouriteProductByProductId(1);
 
         // when
-        var result = this.controller.getProductPage(1, model);
+        var result = this.underTest.getProductPage(1, model);
 
         // then
         StepVerifier.create(result)
@@ -149,7 +166,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).addProductToFavourites(1);
 
         // when
-        var result = this.controller.addProductToFavourites(Mono.just(product));
+        var result = this.underTest.addProductToFavourites(Mono.just(product));
 
         // then
         StepVerifier.create(result)
@@ -169,7 +186,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).addProductToFavourites(1);
 
         // when
-        var result = this.controller.addProductToFavourites(Mono.just(product));
+        var result = this.underTest.addProductToFavourites(Mono.just(product));
 
         // then
         StepVerifier.create(result)
@@ -185,7 +202,7 @@ class ProductControllerTest {
         // given
 
         // when
-        var result = this.controller.addProductToFavourites(Mono.empty());
+        var result = this.underTest.addProductToFavourites(Mono.empty());
 
         // then
         StepVerifier.create(result)
@@ -202,7 +219,7 @@ class ProductControllerTest {
         doReturn(Mono.empty()).when(this.favouriteProductsClient).removeProductFromFavourites(1);
 
         // when
-        var result = this.controller.removeProductFromFavourites(Mono.just(product));
+        var result = this.underTest.removeProductFromFavourites(Mono.just(product));
 
         // then
         StepVerifier.create(result)
@@ -224,7 +241,7 @@ class ProductControllerTest {
                 .when(this.productReviewsClient).createProductReview(1, 5, "Отличный товар");
 
         // when
-        var result = this.controller.createReview(1, payload, model);
+        var result = this.underTest.createReview(1, payload, model);
 
         // then
         StepVerifier.create(result)
@@ -249,7 +266,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).findFavouriteProductByProductId(1);
 
         // when
-        var result = this.controller.createReview(1, payload, model);
+        var result = this.underTest.createReview(1, payload, model);
 
         // then
         StepVerifier.create(result)
@@ -280,7 +297,7 @@ class ProductControllerTest {
                 .when(this.favouriteProductsClient).findFavouriteProductByProductId(1);
 
         // when
-        var result = this.controller.createReview(1, payload, model);
+        var result = this.underTest.createReview(1, payload, model);
 
         // then
         StepVerifier.create(result)
@@ -297,20 +314,4 @@ class ProductControllerTest {
         verifyNoMoreInteractions(this.favouriteProductsClient);
     }
 
-    @Test
-    void handleNoSuchElementException_Returns404ErrorPage() {
-        // given
-        var exception = new NoSuchElementException("customer.products.error.not_found");
-        var model = new ConcurrentModel();
-
-        // when
-        var result = this.controller.handleNoSuchElementException(exception, model);
-
-        // then
-        assertEquals("errors/404", result);
-        assertEquals("customer.products.error.not_found", model.getAttribute("error"));
-
-        verifyNoInteractions(this.productsClient, this.favouriteProductsClient,
-                this.productReviewsClient);
-    }
 }
