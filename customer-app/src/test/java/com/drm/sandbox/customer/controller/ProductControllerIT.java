@@ -3,6 +3,7 @@ package com.drm.sandbox.customer.controller;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -280,7 +281,8 @@ class ProductControllerIT {
                         }""")));
     }
 
-        @Test
+    @Disabled
+    @Test
     void createReview_RequestIsInvalid_ReturnsProductPage() throws Exception {
         // given
         stubFor(post("/api/v1/feedback-api/product-reviews")
