@@ -1,0 +1,6 @@
+selmag:
+  services:
+    catalogue:
+      uri: http://localhost:54321
+    feedback:
+      uri: http://localhost:54321
