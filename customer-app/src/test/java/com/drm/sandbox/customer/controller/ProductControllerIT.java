@@ -169,7 +169,7 @@ class ProductControllerIT {
                             "review": "Well, it's a three..."
                         }"""))
                 .willReturn(created()
-                        .withHeader(HttpHeaders.LOCATION, "http://localhost/api/v1/feedback-api/product-reviews/b852bc8e-cbc5-11ee-bbc5-bf192e2492e5")
+                        .withHeader(HttpHeaders.LOCATION, "http://localhost/feedback-api/product-reviews/b852bc8e-cbc5-11ee-bbc5-bf192e2492e5")
                         .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                         .withBody("""
                                 {
@@ -203,52 +203,22 @@ class ProductControllerIT {
                         }""")));
     }
 
-//    @Test
-//    void createReview_RequestIsInvalid_ReturnsProductPage() throws Exception {
-//        // given
-//        stubFor(post("/api/v1/feedback-api/product-reviews")
-//                .withHeader(HttpHeaders.CONTENT_TYPE, equalTo(MediaType.APPLICATION_JSON_VALUE))
-//                .withRequestBody(equalToJson("""
-//                        {
-//                            "productId": 1,
-//                            "rating": -1,
-//                            "review": "Well, to long review (yep, there are more than 1000 characters)"
-//                        }"""))
-//                .willReturn(badRequest()
-//                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROBLEM_JSON_VALUE)
-//                        .withBody("""
-//                                {
-//                                    "errors": ["Ошибка 1", "Ошибка 2"]
-//                                }""")));
-//
-//        stubFor(get("/feedback-api/favourite-products/by-product-id/1")
-//                .willReturn(okJson("""
-//                        {
-//                            "id": "ec586ecc-cbc8-11ee-8e7d-4fce5e860855",
-//                            "productId": 1,
-//                            "userId": "f1177a8e-cbc8-11ee-8ca2-0bf025125fd5"
-//                        }""")
-//                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)));
-//
-//        // when
-//        this.webTestClient
-//                .mutateWith(mockUser())
-//                .mutateWith(csrf())
-//                .post()
-//                .uri("/customer/products/1/create-review")
-//                .body(BodyInserters.fromFormData("rating", "-1")
-//                        .with("review", "Well, to long review (yep, there are more than 1000 characters)"))
-//                // then
-//                .exchange()
-//                .expectStatus().isBadRequest();
-//
-//        verify(postRequestedFor(urlPathMatching("/api/v1/feedback-api/product-reviews"))
-//                .withHeader(HttpHeaders.CONTENT_TYPE, equalTo(MediaType.APPLICATION_JSON_VALUE))
-//                .withRequestBody(equalToJson("""
-//                        {
-//                            "productId": 1,
-//                            "rating": -1,
-//                            "review": "Well, to long review (yep, there are more than 1000 characters)"
-//                        }""")));
-//    }
+
+    @Test
+    void createReview_UserIsNotAuthorized_RedirectsToLoginPage() {
+        // given
+
+        // when
+        this.webTestClient
+                .mutateWith(csrf())
+                .post()
+                .uri("/customer/products/1/create-review")
+                .body(BodyInserters.fromFormData("rating", "3")
+                        .with("review", "Well, it's a three..."))
+                .exchange()
+                // then
+                .expectStatus().isFound()
+                .expectHeader().location("/login");
+    }
+
 }
