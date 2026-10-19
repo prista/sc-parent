@@ -72,6 +72,23 @@ class ProductControllerIT {
     }
 
     @Test
+    void addProductToFavourites_ProductDoesNotExist_ReturnsNotFoundPage() {
+        // given
+
+        // when
+        this.webTestClient
+                .mutateWith(mockUser())
+                .mutateWith(csrf())
+                .post()
+                .uri("/customer/products/404/add-to-favourites")
+                .exchange()
+                // then
+                .expectStatus().isNotFound();
+
+        verify(getRequestedFor(urlPathMatching("/catalogue-api/products/404")));
+    }
+
+    @Test
     void addProductToFavourites_UserIsNotAuthorized_RedirectsToLoginPage() {
         // given
 
