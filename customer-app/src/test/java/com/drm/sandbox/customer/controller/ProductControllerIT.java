@@ -37,6 +37,83 @@ class ProductControllerIT {
     }
 
     @Test
+    void getProductPage_ProductExists_ReturnsProductPage() {
+        // given
+        stubFor(get("/api/v1/feedback-api/product-reviews/by-product-id/1")
+                .willReturn(okJson("""
+                        [
+                            {
+                                "id": "595d4e5a-cbc1-11ee-864f-8fb72674ccaf",
+                                "productId": 1,
+                                "rating": 3,
+                                "review": "Well, it's a three...",
+                                "userId": "5da9bf2a-cbc1-11ee-a8a7-d355f5a3dd8e"
+                            },
+                            {
+                                "id": "63c4410a-cbc1-11ee-92ea-eff590e7852e",
+                                "productId": 1,
+                                "rating": 5,
+                                "review": "Great product!",
+                                "userId": "6b3cce0c-cbc1-11ee-ac61-b7eed6e7b4f4"
+                            }
+                        ]""")
+                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)));
+
+        stubFor(get("/api/v1/feedback-api/favourite-products/by-product-id/1")
+                .willReturn(created()
+                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                        .withBody("""
+                                {
+                                    "id": "2ecc74c2-cb17-11ee-b719-e35a0e241f11",
+                                    "productId": 1
+                                }""")));
+
+        // when
+        this.webTestClient
+                .mutateWith(mockUser())
+                .get()
+                .uri("/customer/products/1")
+                .exchange()
+                // then
+                .expectStatus().isOk();
+
+        verify(getRequestedFor(urlPathMatching("/catalogue-api/products/1")));
+        verify(getRequestedFor(urlPathMatching("/api/v1/feedback-api/product-reviews/by-product-id/1")));
+        verify(getRequestedFor(urlPathMatching("/api/v1/feedback-api/favourite-products/by-product-id/1")));
+
+    }
+
+    @Test
+    void getProductPage_ProductDoesNotExist_ReturnsNotFound() {
+        // given
+
+        // when
+        this.webTestClient
+                .mutateWith(mockUser())
+                .get()
+                .uri("/customer/products/404")
+                .exchange()
+                // then
+                .expectStatus().isNotFound();
+
+        verify(getRequestedFor(urlPathMatching("/catalogue-api/products/404")));
+    }
+
+    @Test
+    void getProductPage_UserIsNotAuthorized_RedirectsToLoginPage() {
+        // given
+
+        // when
+        this.webTestClient
+                .get()
+                .uri("/customer/products/1")
+                .exchange()
+                // then
+                .expectStatus().isFound()
+                .expectHeader().location("/login");
+    }
+
+    @Test
     void addProductToFavourites_RequestIsValid_ReturnsRedirectionToProductPage() {
         // given
         stubFor(post("/api/v1/feedback-api/favourite-products")
@@ -203,6 +280,73 @@ class ProductControllerIT {
                         }""")));
     }
 
+        @Test
+    void createReview_RequestIsInvalid_ReturnsProductPage() throws Exception {
+        // given
+        stubFor(post("/api/v1/feedback-api/product-reviews")
+                .withHeader(HttpHeaders.CONTENT_TYPE, equalTo(MediaType.APPLICATION_JSON_VALUE))
+                .withRequestBody(equalToJson("""
+                        {
+                            "productId": 1,
+                            "rating": -1,
+                            "review": "Ну очень длинный отзыв (да, тут более 1000 символов)"
+                        }"""))
+                .willReturn(badRequest()
+                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_PROBLEM_JSON_VALUE)
+                        .withBody("""
+                                {
+                                    "errors": ["Ошибка 1", "Ошибка 2"]
+                                }""")));
+
+        stubFor(get("/api/v1/feedback-api/favourite-products/by-product-id/1")
+                .willReturn(okJson("""
+                        {
+                            "id": "ec586ecc-cbc8-11ee-8e7d-4fce5e860855",
+                            "productId": 1,
+                            "userId": "f1177a8e-cbc8-11ee-8ca2-0bf025125fd5"
+                        }""")
+                        .withHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)));
+
+        // when
+        this.webTestClient
+                .mutateWith(mockUser())
+                .mutateWith(csrf())
+                .post()
+                .uri("/customer/products/1/create-review")
+                .body(BodyInserters.fromFormData("rating", "-1")
+                        .with("review", "Ну очень длинный отзыв (да, тут более 1000 символов)"))
+                // then
+                .exchange()
+                .expectStatus().isBadRequest();
+
+        verify(postRequestedFor(urlPathMatching("/api/v1/feedback-api/product-reviews"))
+                .withHeader(HttpHeaders.CONTENT_TYPE, equalTo(MediaType.APPLICATION_JSON_VALUE))
+                .withRequestBody(equalToJson("""
+                        {
+                            "productId": 1,
+                            "rating": -1,
+                            "review": "Ну очень длинный отзыв (да, тут более 1000 символов)"
+                        }""")));
+    }
+
+    @Test
+    void createReview_ProductDoesNotExist_ReturnsNotFoundPage() {
+        // given
+
+        // when
+        this.webTestClient
+                .mutateWith(mockUser())
+                .mutateWith(csrf())
+                .post()
+                .uri("/customer/products/404/create-review")
+                .body(BodyInserters.fromFormData("rating", "3")
+                        .with("review", "Well, it's a three..."))
+                .exchange()
+                // then
+                .expectStatus().isNotFound();
+
+        verify(getRequestedFor(urlPathMatching("/catalogue-api/products/404")));
+    }
 
     @Test
     void createReview_UserIsNotAuthorized_RedirectsToLoginPage() {
