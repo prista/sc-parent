@@ -8,6 +8,7 @@ import com.drm.sandbox.customer.controller.payload.NewProductReviewPayload;
 import com.drm.sandbox.customer.entity.Product;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.web.server.csrf.CsrfToken;
 import org.springframework.security.web.reactive.result.view.CsrfRequestDataValueProcessor;
 import org.springframework.stereotype.Controller;
@@ -88,6 +89,7 @@ public class ProductController {
     }
 
     @ExceptionHandler(NoSuchElementException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
     public String handleNoSuchElementException(NoSuchElementException exception, Model model) {
         model.addAttribute("error", exception.getMessage());
         return "errors/404";
