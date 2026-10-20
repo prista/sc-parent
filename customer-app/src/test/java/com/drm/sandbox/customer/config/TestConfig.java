@@ -27,7 +27,7 @@ public class TestConfig {
 
     // Integration tests talk to WireMock directly, so the token-relay filter is not needed.
     @Bean
-    @Primary
+    @Primary // to override the production bean
     public WebClientProductsClient mockWebClientProductsClient() {
         return new WebClientProductsClient(WebClient.builder()
                 .baseUrl("http://localhost:54321")
@@ -35,7 +35,7 @@ public class TestConfig {
     }
 
     @Bean
-    @Primary
+    @Primary // to override the production bean
     public WebClientFavouriteProductsClient mockWebClientFavouriteProductsClient() {
         return new WebClientFavouriteProductsClient(WebClient.builder()
                 .baseUrl("http://localhost:54321")
@@ -43,7 +43,7 @@ public class TestConfig {
     }
 
     @Bean
-    @Primary
+    @Primary // to override the production bean
     public WebClientProductReviewsClient mockWebClientProductReviewsClient() {
         return new WebClientProductReviewsClient(WebClient.builder()
                 .baseUrl("http://localhost:54321")
