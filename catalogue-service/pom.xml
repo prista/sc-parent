@@ -74,6 +74,17 @@
             <optional>true</optional>
         </dependency>
 
+        <dependency>
+            <groupId>org.springframework.restdocs</groupId>
+            <artifactId>spring-restdocs-mockmvc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restdocs</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- testing dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
