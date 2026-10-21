@@ -56,7 +56,9 @@ class ProductRestControllerIT {
                                 }""")
                 )
                 .andDo(document("catalogue/products/find_all",
-                        preprocessResponse(prettyPrint(), modifyHeaders().remove("Vary")),
+                        preprocessResponse(prettyPrint(),
+                                modifyHeaders().remove("Vary")),  // we don't want to document the Vary header,
+                                                                        // because it is not relevant for the API consumer
                         responseFields(
                                 fieldWithPath("id").description("Идентификатор товара").type("int"),
                                 fieldWithPath("title").description("Название товара").type("string"),
