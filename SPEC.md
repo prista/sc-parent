@@ -359,7 +359,7 @@ The customer storefront is a reactive, server-side rendered application using Sp
 
 - `POST /customer/products/{productId}/create-review` — submits a review; on validation error re-renders the product page with errors.
 
-**Access:** every route above requires an authenticated user — the storefront's filter chain is `anyExchange().authenticated()` with `oauth2Login`, so an anonymous request is redirected to Keycloak before it ever reaches a controller. **CSRF:** the chain leaves CSRF protection enabled, so the three `POST` routes must submit a token. The storefront's forms use `th:action`, and `ProductController` contributes a `@ModelAttribute` that exposes the `Mono<CsrfToken>` and republishes it under `CsrfRequestDataValueProcessor.DEFAULT_CSRF_ATTR_NAME`; reactive Thymeleaf's `CsrfRequestDataValueProcessor` then injects the hidden `_csrf` input into those forms automatically (no template changes are needed).
+**Access:** every route above requires an authenticated user — the storefront's filter chain is `anyExchange().authenticated()` with `oauth2Login`, so an anonymous request is redirected to Keycloak before it ever reaches a controller. **CSRF:** the chain leaves CSRF protection enabled, so the three `POST` routes must submit a token. The storefront's forms use `th:action`, and `ProductController` contributes a `@ModelAttribute` that exposes the `Mono<CsrfToken>` and republishes it under `CsrfRequestDataValueProcessor.DEFAULT_CSRF_ATTR_NAME`; reactive Thymeleaf's `CsrfRequestDataValueProcessor` then injects the hidden `_csrf` input into those forms automatically (no template changes are needed). **404:** `ProductController`'s `NoSuchElementException` handler is annotated with `@ResponseStatus(HttpStatus.NOT_FOUND)`, so a missing product renders the `errors/404` template with an actual `404 Not Found` status.
 
 #### Client-Side Communication
 
@@ -374,28 +374,44 @@ Each returns `Mono`/`Flux`; controllers compose them reactively (e.g. `collectLi
 
 ## 8. Testing
 
-The project ships unit tests and Spring Boot integration tests across the two blocking modules (`catalogue-service`, `manager-app`), plus controller unit tests in `customer-app` (`ProductsControllerTest`, `ProductControllerTest`). `feedback-service` has no tests yet.
+The project ships unit tests and Spring Boot integration tests in all four modules. Surefire runs the unit tests (`*Test`), while Failsafe runs the integration tests (`*IT`) in the `verify` phase — so `./mvnw test` executes only unit tests and `./mvnw verify` executes both.
 
-### 8.1 Unit tests (`manager-app`)
+### 8.1 Unit tests
 
-- `ProductsControllerTest` uses plain Mockito (`@ExtendWith(MockitoExtension.class)`, `@Mock` / `@InjectMocks`) with no Spring context. It stubs the `ProductsRestClient` and asserts the returned view name / redirect target and model attributes (success and validation-error paths).
+- **`manager-app`:** `ProductsControllerTest` uses plain Mockito (`@ExtendWith(MockitoExtension.class)`, `@Mock` / `@InjectMocks`) with no Spring context. It stubs the `ProductsRestClient` and asserts the returned view name / redirect target and model attributes (success and validation-error paths).
+- **`manager-app`:** `ProductControllerTest` covers the item-level routes the same way (view, edit form, update, delete, 404 page), and `OAuthClientHttpRequestInterceptorTest` verifies that the interceptor adds the `Authorization: Bearer …` header.
+- **`catalogue-service`:** `ProductsRestControllerTest` / `ProductRestControllerTest` (Mockito) exercise the controllers, and `DefaultProductServiceTest` covers the service layer.
+- **`customer-app`:** `ProductsControllerTest` / `ProductControllerTest` (Mockito + `StepVerifier`) assert the reactive controllers' view names, redirects, and model attributes.
+- **`feedback-service`:** `FavouriteProductsRestControllerTest` / `ProductReviewsRestControllerTest` (Mockito + `StepVerifier`) exercise the reactive controllers with no Spring context — listing, creation (including the `201 Created` `Location` header, which carries the full `/api/v1/feedback-api/...` path), validation-driven behaviour, and deletion.
 
 ### 8.2 Integration tests
 
-Integration tests use `@SpringBootTest` with `@AutoConfigureMockMvc` (Spring Boot 4.0 package `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`) to exercise the web layer end-to-end without a live server.
+The servlet integration tests use `@SpringBootTest` with `@AutoConfigureMockMvc` (Spring Boot 4.0 package `org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`); the reactive ones use `@AutoConfigureWebTestClient`. Either way the web layer is exercised end-to-end without a live server.
 
-- **`catalogue-service` — `ProductsRestControllerIT`:** boots against an embedded Testcontainers PostgreSQL (datasource URL `jdbc:tc:postgresql:...` in `src/test/resources/application.yml`), seeds data with `@Sql("/sql/products.sql")`, and rolls back each test via `@Transactional`. The JWT is simulated with `SecurityMockMvcRequestPostProcessors.jwt()` and a mocked `JwtDecoder` (`TestingBeans`).
-- **`manager-app` — `ProductsControllerIT`:** boots with the `standalone` profile (relies on the local `manager` database) and simulates a signed-in user with `SecurityMockMvcRequestPostProcessors.user().roles("MANAGER")`. The OAuth2 client beans (`ClientRegistrationRepository`, `OAuth2AuthorizedClientRepository`) are mocked in `TestingBeans`, and `catalogue-service` is stubbed with WireMock.
+- **`catalogue-service` — `ProductsRestControllerIT`:** boots against an embedded Testcontainers PostgreSQL (datasource URL `jdbc:tc:postgresql:...` in `src/test/resources/application.yml`), seeds data with `@Sql("/sql/products.sql")`, and rolls back each test via `@Transactional`. The JWT is simulated with `SecurityMockMvcRequestPostProcessors.jwt()` and a mocked `JwtDecoder` (`TestingBeans`). It covers the collection `GET` and `POST` endpoints.
+- **`catalogue-service` — `ProductRestControllerIT`:** the same setup for item-level `GET`/`PATCH`/`DELETE`. It is also the REST Docs-enabled test (see 8.5): annotated with `@AutoConfigureRestDocs` and `@ExtendWith(RestDocumentationExtension.class)`, its `find_all` test writes the `catalogue/products/find_all` snippets.
+- **`catalogue-service` — `ProductRepositoryIT`:** a `@DataJpaTest` against the same Testcontainers PostgreSQL, covering the repository queries.
+- **`manager-app` — `ProductsControllerIT` / `ProductControllerIT`:** use a Testcontainers PostgreSQL (the `jdbc:tc:postgresql:...` URL in `src/test/resources/application.yml`, database `manager`) and simulate a signed-in user with `SecurityMockMvcRequestPostProcessors.user().roles("MANAGER")`. The OAuth2 client beans (`ClientRegistrationRepository`, `OAuth2AuthorizedClientRepository`) are mocked in `TestingBeans`, and `catalogue-service` is stubbed with WireMock.
+- **`customer-app` — `ProductsControllerIT` / `ProductControllerIT`:** reactive integration tests using `@SpringBootTest` + `@AutoConfigureWebTestClient` (Spring Boot 4.0 package `org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient`) and `@WireMockTest(httpPort = 54321)`, which stubs both `catalogue-service` and `feedback-service`. `config/TestConfig` mocks `ReactiveClientRegistrationRepository` / `ServerOAuth2AuthorizedClientRepository` and supplies `@Primary` `WebClient*Client` beans pointing at `http://localhost:54321`, so the token-relay filter is bypassed. Requests are authenticated with the reactive `mockUser()` mutator (and `csrf()` for `POST`); the tests cover the product list with/without a filter, the favourites page, adding to favourites, the 404 path, and the redirect to Keycloak for an unauthenticated request.
+- **`feedback-service` — `FavouriteProductsRestControllerIT` / `ProductReviewsRestControllerTestIT`:** reactive `@SpringBootTest` + `@AutoConfigureWebTestClient` (the same Boot 4.0 annotation package as `customer-app`), backed by a Testcontainers `MongoDBContainer("mongo:8")`. `config/TestConfig` declares the container as a bean (`initMethod = "start"`, `destroyMethod = "stop"`) annotated with `@ServiceConnection`, so Spring Boot wires `spring.data.mongodb.*` from it, and supplies a mocked `ReactiveJwtDecoder` because no Keycloak runs during tests. Each test seeds documents through `ReactiveMongoTemplate` and removes them afterwards. Requests are authenticated with the reactive `mockJwt().jwt(builder -> builder.subject(...))` mutator — the `sub` is exactly the `userId` the service stores — and unauthenticated calls assert `401 Unauthorized`. All URIs include the full `/api/v1/feedback-api/...` prefix. (`ProductReviewsRestControllerTestIT` keeps its historical name; Failsafe still picks it up because it ends in `IT`.)
 
 ### 8.3 Test dependencies
 
 - `org.springframework.boot:spring-boot-starter-test` (test)
 - `org.springframework.boot:spring-boot-starter-webmvc-test` (test) — provides `@AutoConfigureMockMvc`
 - `org.springframework.security:spring-security-test` (test)
+- `org.springframework.boot:spring-boot-starter-webflux-test` (test, `customer-app`, `feedback-service`) — provides `WebTestClient` and `@AutoConfigureWebTestClient`
+- `org.springframework.boot:spring-boot-starter-security-test` (test, `customer-app`, `feedback-service`) — reactive `mockUser()` / `csrf()` / `mockJwt()` mutators
+- `io.projectreactor:reactor-test` (test, `customer-app`, `feedback-service`) — `StepVerifier`
 - `org.testcontainers:testcontainers-postgresql` (test, `catalogue-service`, `manager-app`)
-- `org.wiremock:wiremock-standalone` (test, `manager-app`)
+- `org.testcontainers:testcontainers-mongodb` (test, `feedback-service`) — the `MongoDBContainer` behind its ITs
+- `org.springframework.boot:spring-boot-testcontainers` (test, `feedback-service`) — `@ServiceConnection` / container lifecycle glue
+- `org.wiremock:wiremock-standalone` (test, `manager-app`, `customer-app`)
+- `org.springframework.restdocs:spring-restdocs-mockmvc` (test, `catalogue-service`)
+- `org.springframework.restdocs:spring-restdocs-webtestclient` (test, `feedback-service`) — declared for WebTestClient-based REST Docs (not yet used by the current tests)
+- `org.springframework.boot:spring-boot-restdocs` (test, `catalogue-service`) — provides `@AutoConfigureRestDocs`
 
-### 8.4 Testcontainers (`catalogue-service`)
+### 8.4 Testcontainers (`catalogue-service`, `manager-app`, `feedback-service`)
 
 The `catalogue-service` integration tests run against an ephemeral PostgreSQL container managed by [Testcontainers](https://www.testcontainers.org/) — no local database is required.
 
@@ -410,7 +426,19 @@ The `catalogue-service` integration tests run against an ephemeral PostgreSQL co
 - **JDBC driver approach:** the `jdbc:tc:postgresql:<tag>:///<database>` URL is handled by the Testcontainers JDBC driver, which pulls the `postgres:17.4-alpine` image and starts the container on a random port before Flyway runs.
 - **`TC_DAEMON=true`:** runs the container in daemon mode — it is left running after the test JVM exits and reused by subsequent runs, avoiding a cold start each time.
 - **Database lifecycle:** Flyway applies the migrations to the container, `@Sql("/sql/products.sql")` seeds rows before each test, and `@Transactional` rolls them back afterwards.
+- **`manager-app`:** the same `jdbc:tc:postgresql:...` approach against the `manager` database (see `manager-app/src/test/resources/application.yml`).
+- **`feedback-service`:** no JDBC URL here — `config/TestConfig` declares `MongoDBContainer("mongo:8")` as a Spring bean with `@ServiceConnection`, so Testcontainers starts the container and Spring Boot derives the MongoDB connection from it. `spring-boot-testcontainers` provides `@ServiceConnection`; `testcontainers-mongodb` provides the container class. Docker is required.
 - **Requirement:** Docker must be running.
+
+### 8.5 Spring REST Docs (`catalogue-service`)
+
+The catalogue API documentation is generated from the integration tests by Spring REST Docs — the tests are the source of truth, so the docs cannot drift from the actual responses.
+
+- **Test support:** `ProductRestControllerIT` is annotated with `@AutoConfigureRestDocs` (from the `spring-boot-restdocs` test module) and `@ExtendWith(RestDocumentationExtension.class)`. Its `find_all` test documents the `GET /catalogue-api/products/1` response through `document("catalogue/products/find_all", …)`, using `preprocessResponse(prettyPrint(), modifyHeaders().remove("Vary"))` and `responseFields(...)` for `id`, `title`, and `details`.
+- **Snippets:** generated into the default `catalogue-service/target/generated-snippets/catalogue/products/find_all/` (`response-body.adoc`, `response-fields.adoc`, and the usual REST Docs snippets).
+- **Source document:** `catalogue-service/src/asciidoc/documentation.adoc` is the hand-written Asciidoctor document ("REST API каталога"); it includes the two snippets above via the `{snippets}` attribute.
+- **Rendering:** the parent `pom.xml` configures `asciidoctor-maven-plugin` 3.2.0 (with `spring-restdocs-asciidoctor` 4.0.0, which supplies the `{snippets}` attribute) to run `process-asciidoc` in the `post-integration-test` phase with the `html` backend and `book` doctype. The plugin finds sources under `src/asciidoc` and, with `preserveDirectories`, writes the result to `catalogue-service/target/generated-docs/documentation.html`.
+- **When it runs:** because the phase is `post-integration-test`, the documentation is produced by `./mvnw verify` / `./mvnw install` (not by `./mvnw test`). The `catalogue-service` ITs need Docker for Testcontainers.
 
 ## 9. Development Workflow
 
@@ -419,7 +447,7 @@ The `catalogue-service` integration tests run against an ephemeral PostgreSQL co
     - `manager` (port `5433`), user `manager` / password `manager` — used by `manager-app` for user management.
     - `feedback-service` uses MongoDB instead — `mongodb://localhost:27017/feedback` (`docker run --name feedback-db -p 27017:27017 mongo:8`).
 2.  **Keycloak Setup:** Start Keycloak (`selmag-keycloak`, port `8082`, realm `selmag`). See `README.MD` for the `docker run` command and `config/keycloak/import/realm-export.json` for the realm configuration. Keycloak is required by **all four** services: `manager-app` and `customer-app` sign users in through `oauth2Login` and relay the resulting token, and both resource servers — `catalogue-service` and `feedback-service` — resolve `issuer-uri` at startup. If Keycloak is unreachable, `feedback-service` cannot initialise its JWT decoder (the error shows up at startup or on the first request, depending on the version) — it never falls back to running unsecured. Both clients are already defined in the exported realm (`manager-app`, `customer-app`), so the only manual step is a login user: the export contains no human users, just the two service accounts — create one in the realm and add it to the `managers` group (admin UI) and/or the `customers` group (storefront).
-3.  **Build Project:** From the project root, run `./mvnw clean install` to build all four modules.
+3.  **Build Project:** From the project root, run `./mvnw clean install` to build all four modules; this also runs the integration tests and generates the `catalogue-service` REST Docs HTML (`catalogue-service/target/generated-docs/documentation.html`).
 4.  **Run Backend Service:** Run `./mvnw -pl catalogue-service spring-boot:run` (port `8081`; Flyway applies database migrations).
 5.  **Run Feedback Service:** Run `./mvnw -pl feedback-service spring-boot:run` (port `8084`; needs MongoDB and Keycloak running). Its endpoints now require a Bearer token — without one every call returns `401`, and favourites are stored per user (`sub` from the token).
 6.  **Run Admin Frontend:** Run `./mvnw -pl manager-app spring-boot:run` (port `8080`).
@@ -427,4 +455,4 @@ The `catalogue-service` integration tests run against an ephemeral PostgreSQL co
 8.  **Access UI:**
     - Admin: `http://localhost:8080/catalogue/products/list` (redirected to Keycloak to sign in).
     - Customer storefront: `http://localhost:8083/customer/products/list` (also redirected to Keycloak to sign in).
-9.  **Run Tests:** From the project root, run `./mvnw test` to run all tests. The `catalogue-service` integration test uses Testcontainers, so Docker must be running.
+9.  **Run Tests:** From the project root, run `./mvnw test` for the unit tests or `./mvnw verify` for unit + integration tests (and REST Docs generation). The `catalogue-service`, `manager-app` and `feedback-service` integration tests use Testcontainers (PostgreSQL or MongoDB), so Docker must be running; `customer-app` ITs use WireMock on port `54321` and need no Docker.
