@@ -82,6 +82,13 @@
             <artifactId>spring-restdocs-webtestclient</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Boot 4: @AutoConfigureRestDocs + RestDocsWebTestClientBuilderCustomizer.
+             The annotation lives in org.springframework.boot.restdocs.test.autoconfigure. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restdocs</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
