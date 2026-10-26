@@ -34,7 +34,7 @@ public class ProductsRestController {
 
     @PostMapping
     @Operation(
-            //security = @SecurityRequirement(name = "keycloak"), // we can't work without this, (swagger-ui) because of the lack of a valid access token
+            security = @SecurityRequirement(name = "keycloak"), // we can't work without this, (swagger-ui) because of the lack of a valid access token
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
                             mediaType = MediaType.APPLICATION_JSON_VALUE,
