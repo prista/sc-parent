@@ -170,9 +170,18 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 
 ## Swagger UI (SpringDoc) и авторизация через Keycloak
 
-`catalogue-service` параллельно с REST Docs отдаёт OpenAPI-спецификацию через `springdoc-openapi-starter-webmvc-ui` (3.0.3): UI — `http://localhost:8081/swagger-ui/index.html`, сама спека — `http://localhost:8081/v3/api-docs`. Оба пути открыты в `SecurityConfig` (`permitAll()`), иначе страница требовала бы JWT.
+OpenAPI-спецификацию параллельно с REST Docs отдают два сервиса:
 
-Схема безопасности описана аннотацией `@SecurityScheme(name = "keycloak", type = OAUTH2, flows = authorizationCode …)` в `CatalogueServiceApplication`: `authorizationUrl` и `tokenUrl` указывают на realm `selmag`.
+| Сервис | Зависимость | UI | Спека |
+|---|---|---|---|
+| `catalogue-service` (Spring MVC) | `springdoc-openapi-starter-webmvc-ui` 3.0.3 | `http://localhost:8081/swagger-ui/index.html` | `http://localhost:8081/v3/api-docs` |
+| `feedback-service` (WebFlux) | `springdoc-openapi-starter-webflux-ui` 3.0.3 | `http://localhost:8084/swagger-ui/index.html` | `http://localhost:8084/v3/api-docs` |
+
+Пути `/swagger-ui/**`, `/webjars/**`, `/swagger-ui.html` и `/v3/api-docs/**` открыты в `SecurityConfig` (`permitAll()`) — иначе resource server требовал бы JWT даже на страницу документации.
+
+Схема безопасности описана аннотацией `@SecurityScheme(name = "keycloak", type = OAUTH2, flows = authorizationCode …)` на главном классе каждого сервиса (`CatalogueServiceApplication`, `FeedbackServiceApplication`): `authorizationUrl` и `tokenUrl` указывают на realm `selmag`.
+
+### `catalogue-service`
 
 Кнопка **Authorize** настраивается в `application-standalone.yaml`:
 
@@ -189,6 +198,47 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 - `redirectUris: ["http://localhost:8081/swagger-ui/*"]`;
 - `webOrigins: ["+"]`;
 - `edit_catalogue` / `view_catalogue` — в `optionalClientScopes`, чтобы их можно было запросить.
+
+### `feedback-service` (WebFlux)
+
+Та же схема, но клиент реактивный, и кастомных scope'ов у сервиса нет: `SecurityConfig` требует только аутентификацию (`anyExchange().authenticated()`), поэтому в `@SecurityScheme` достаточно дефолтных `openid` / `microprofile-jwt` (это отмечено комментарием в `FeedbackServiceApplication`).
+
+| Свойство | Значение |
+|---|---|
+| `springdoc.swagger-ui.oauth.client-id` | `feedback-service-swagger-ui` |
+| `springdoc.swagger-ui.oauth.use-pkce-with-authorization-code-grant` | `true` |
+| `springdoc.swagger-ui.oauth2-redirect-url` | **не задан** → springdoc сам подставляет `http://localhost:8084/swagger-ui/oauth2-redirect.html` |
+
+Клиент `feedback-service-swagger-ui` в Keycloak: публичный, PKCE, `redirectUris: ["http://localhost:8084/swagger-ui/*", "http://localhost:8084/webjars/swagger-ui/*"]`, `webOrigins: ["http://localhost:8084"]`.
+
+`@SecurityRequirement(name = "keycloak")` здесь выставлен только на `GET /api/v1/feedback-api/product-reviews/by-product-id/{productId}`. Остальные операции (создание отзыва, favourites) в спеке без `security`, хотя токен нужен всем — для них Try-it-out пойдёт без `Authorization` и получит 401.
+
+### Откуда берётся путь `oauth2-redirect.html` (и при чём тут `webjars`)
+
+Swagger UI — это JS-бандл, который распространяется как **WebJar** (`org.webjars:swagger-ui`): файлы лежат в jar'е под `META-INF/resources/webjars/swagger-ui/<версия>/…`, и Spring Boot автоматически раздаёт эту папку по URL `/webjars/**` (резолвер умеет подставлять версию, поэтому путь без неё тоже работает). Там же лежит `oauth2-redirect.html` — страничка, которая принимает `code` и отдаёт его родительскому окну.
+
+springdoc дополнительно публикует те же файлы по короткому алиасу `/swagger-ui/**` (плюс `swagger-ui.html` → редирект на `index.html`), поэтому страница доступна по обоим путям:
+
+```bash
+curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8084/swagger-ui/oauth2-redirect.html          # 200
+curl -o /dev/null -s -w "%{http_code}\n" http://localhost:8084/webjars/swagger-ui/oauth2-redirect.html  # 200
+```
+
+Но Keycloak сверяет `redirect_uri` посимвольно (с `*` только в конце паттерна), а какой именно путь уйдёт в запрос, решает springdoc — он кладёт его в конфиг UI:
+
+```bash
+curl -s http://localhost:8084/v3/api-docs/swagger-config
+# {"configUrl":"/v3/api-docs/swagger-config","oauth2RedirectUrl":"http://localhost:8084/swagger-ui/oauth2-redirect.html", ...}
+```
+
+Поэтому в клиенте обязателен `/swagger-ui/oauth2-redirect.html` (покрывается паттерном `/swagger-ui/*`). Если оставить только `/webjars/swagger-ui/*`, Keycloak ответит **400** страницей `Invalid parameter: redirect_uri` — в попапе Swagger UI это выглядит как ошибка авторизации:
+
+```bash
+# /swagger-ui/... → 400 (redirect_uri не разрешён), /webjars/swagger-ui/... → 302 на форму логина
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8082/realms/selmag/protocol/openid-connect/auth?client_id=feedback-service-swagger-ui&response_type=code&scope=openid&redirect_uri=http%3A%2F%2Flocalhost%3A8084%2Fswagger-ui%2Foauth2-redirect.html"
+```
+
+Паттерн `/webjars/swagger-ui/*` функционально не нужен: используется только тот путь, который springdoc положил в `oauth2RedirectUrl`. Он понадобится, лишь если явно задать `springdoc.swagger-ui.oauth2-redirect-url` на webjars-путь.
 
 ### Зачем `webOrigins` (иначе `TypeError: Failed to fetch`)
 
@@ -208,6 +258,7 @@ curl -s -i -X POST http://localhost:8082/realms/selmag/protocol/openid-connect/t
 
 ### Подводные камни
 
-- `--import-realm` применяет `realm-export.json` только при **первом** создании реалма. Если контейнер `selmag-keycloak` уже существует, правки в файле на него не влияют: Web origins нужно добавить в консоли (Clients → `catalogue-service-swagger-ui` → Web origins → `+` → Save) или пересоздать контейнер.
-- Swagger UI подставляет `Authorization: Bearer` в Try-it-out только для операций, помеченных security-требованием. Оно задаётся **на операции** (`security = @SecurityRequirement(name = "keycloak")` в `@Operation`), а не глобально: сейчас так помечен `POST /catalogue-api/products`. Для `PATCH`/`DELETE`/`GET` в `ProductRestController` требование не выставлено — если их тоже нужно дергать из Swagger с токеном, аннотацию надо добавить и туда (или задать глобально через `@OpenAPIDefinition(security = …)`).
+- `--import-realm` применяет `realm-export.json` только при **первом** создании реалма. Если контейнер `selmag-keycloak` уже существует, правки в файле на него не влияют: Web origins / Valid redirect URIs нужно править в консоли (Clients → `…-swagger-ui` → соответствующая вкладка) или пересоздавать контейнер.
+- Swagger UI подставляет `Authorization: Bearer` в Try-it-out только для операций, помеченных security-требованием. Оно задаётся **на операции** (`security = @SecurityRequirement(name = "keycloak")` в `@Operation`), а не глобально: сейчас так помечены `POST /catalogue-api/products` и `GET /api/v1/feedback-api/product-reviews/by-product-id/{productId}`. Остальные операции в спеке без требования — если их тоже нужно дергать из Swagger с токеном, аннотацию надо добавить и туда (или задать глобально через `@OpenAPIDefinition(security = …)`).
+- Экспорт реалма из админки Keycloak **маскирует** `secret` клиентов как `"**********"`. Такой файл нельзя коммитить как есть: на чистом `--import-realm` секрет не совпадёт с тем, что прописан в `manager-app` / `customer-app` (`application-standalone.*`), и оба приложения сломаются на обмене `code` → token.
 - В scopes схемы, кроме дефолтных `openid` / `microprofile-jwt`, должны быть `view_catalogue` и `edit_catalogue` — иначе нужный scope не выбрать в окне Authorize, в токене не будет `SCOPE_edit_catalogue`, и `POST` вернёт 403. У клиента `catalogue-service-swagger-ui` оба scope'а лежат в `optionalClientScopes`.
