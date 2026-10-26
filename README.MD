@@ -154,3 +154,16 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 Ключевая логика, которую покрывает WireMock, живёт внутри `RestClientProductsRestClient` и зависит от HTTP-ответа: `200` → `Product`, `404` → `Optional.empty()`, `400` + `problem+json` → исключение со списком `errors`, `204` → ок. Замокав метод Mockito, ты подставляешь конечный результат и эту логику не тестируешь.
 
 В проекте оба варианта есть рядом: `ProductsControllerTest` — unit-тест на Mockito (мокает `ProductsRestClient`), `ProductsControllerIT` / `ProductControllerIT` — интеграционные на WireMock.
+
+## Документация API (Spring REST Docs)
+
+В проекте есть пример Spring REST Docs — документация API генерируется **из интеграционных тестов**, а не из аннотаций, как в SpringDoc/OpenAPI (Swagger).
+
+- `catalogue-service` — `ProductRestControllerIT` (тест `find_all`) документирует получение товара: сниппеты пишутся в `catalogue-service/target/generated-snippets/catalogue/products/find_all/`, исходник документа — `catalogue-service/src/asciidoc/documentation.adoc`.
+- `feedback-service` — `ProductReviewsRestControllerTestIT` (тест создания отзыва) документирует `POST /api/v1/feedback-api/product-reviews`: сниппеты пишутся в `feedback-service/target/generated-snippets/feedback/product_reviews/create_product_review/`, исходник — `feedback-service/src/main/asciidoc/documentation.adoc`.
+
+Как это работает: тест выполняет реальный запрос через MockMvc/WebTestClient и вызывает `document("...")` — REST Docs сохраняет сниппеты по **фактическому** запросу и ответу. Затем `documentation.adoc` подключает их через `include::{snippets}/...`, а `asciidoctor-maven-plugin` (настроен в родительском `pom.xml`) собирает HTML.
+
+Поэтому документация появляется только после `./mvnw verify` или `./mvnw install` (не после `./mvnw test`); для `catalogue-service` и `feedback-service` при этом нужен Docker (Testcontainers). HTML-результат — в `target/generated-docs/documentation.html` соответствующего модуля.
+
+**Отличие от SpringDoc.** SpringDoc строит OpenAPI-спецификацию автоматически — из аннотаций (или прямо из рантайма запущенного приложения), и тесты для этого не нужны. REST Docs наоборот делает источником правды IT-тесты: примеры в документации — это реальные запросы/ответы, поэтому документация не может разойтись с кодом (устаревший пример ломает тест). Цена — нужно писать и поддерживать тесты, и задокументированы только те эндпоинты, которые ими покрыты.
