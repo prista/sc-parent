@@ -58,19 +58,19 @@ class ProductsRestControllerIT {
     }
 
     @Test
-    @Sql("/sql/products.sql")
-    void findProducts_DefaultJWT_ReturnsProducts() throws Exception {
+    void findProducts_UserIsNotAuthorized_ReturnsForbidden() throws Exception {
         // given
         var requestBuilder = MockMvcRequestBuilders.get("/catalogue-api/products")
                 .param("filter", "Product")
-                .with(jwt()); // valid jwt with default claims, does not contain SCOPE_view_catalogue
+                // valid jwt with default claims, but it does not contain SCOPE_view_catalogue
+                .with(jwt());
 
         // when
         this.mockMvc.perform(requestBuilder)
                 // then
                 .andDo(print())
                 .andExpectAll(
-                        status().isOk()
+                        status().isForbidden()
                 );
     }
 
