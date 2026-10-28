@@ -1,2 +1,16 @@
 server:
   port: 8085
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
+        registration:
+          keycloak:
+            authorization-grant-type: client_credentials
+            scope:
+              - metrics
+            client-id: admin-service
+            client-secret: KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3

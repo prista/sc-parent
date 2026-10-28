@@ -4,6 +4,16 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8082/realms/selmag
+  boot:
+    admin:
+      client:
+        url: http://localhost:8085
+        instance:
+          name: catalogue-service
+          # Register URLs by IP instead of hostname, so the admin server reaches
+          # this instance at http://<ip>:8081/... rather than http://<hostname>:8081/...
+          service-host-type: ip
+        enabled: true
   datasource:
     url: jdbc:postgresql://localhost:5432/catalogue
     username: catalogue
