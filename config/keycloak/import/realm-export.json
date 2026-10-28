@@ -106,6 +106,7 @@
       }
     ],
     "client": {
+      "feedback-service-swagger-ui": [],
       "realm-management": [
         {
           "id": "6b52d49f-50d9-46a3-abc8-4b7d5667c697",
@@ -321,6 +322,7 @@
       "manager-app": [],
       "security-admin-console": [],
       "admin-cli": [],
+      "catalogue-service-swagger-ui": [],
       "customer-app": [],
       "account-console": [],
       "broker": [
@@ -421,7 +423,8 @@
           "containerId": "c929d65b-67a6-4329-9183-3bcdd720ee50",
           "attributes": {}
         }
-      ]
+      ],
+      "admin-service": []
     }
   },
   "groups": [
@@ -501,6 +504,22 @@
   "webAuthnPolicyPasswordlessAcceptableAaguids": [],
   "webAuthnPolicyPasswordlessExtraOrigins": [],
   "users": [
+    {
+      "id": "c4fd3c9d-4f76-44f5-85e0-506ab0edb368",
+      "username": "service-account-admin-service",
+      "emailVerified": false,
+      "createdTimestamp": 1793175849409,
+      "enabled": true,
+      "totp": false,
+      "serviceAccountClientId": "admin-service",
+      "disableableCredentialTypes": [],
+      "requiredActions": [],
+      "realmRoles": [
+        "default-roles-selmag"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
     {
       "id": "6f85e84c-99cf-4ac2-b51c-71f22dc6b12e",
       "username": "service-account-customer-app",
@@ -703,6 +722,66 @@
       ]
     },
     {
+      "id": "305f6bcd-5818-4d7b-a1d0-8275c8c56776",
+      "clientId": "admin-service",
+      "name": "",
+      "description": "",
+      "rootUrl": "",
+      "adminUrl": "",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3",
+      "redirectUris": [
+        "/*"
+      ],
+      "webOrigins": [
+        "/*"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "client.secret.creation.time": "1793175849",
+        "backchannel.logout.session.required": "true",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "service_account",
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "edit_catalogue",
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "view_catalogue",
+        "metrics",
+        "microprofile-jwt"
+      ]
+    },
+    {
       "id": "097fccc4-311d-4ee3-b5d9-86b4ae905542",
       "clientId": "broker",
       "name": "${client_broker}",
@@ -741,6 +820,64 @@
         "phone",
         "offline_access",
         "organization",
+        "microprofile-jwt"
+      ]
+    },
+    {
+      "id": "f8639447-8c3a-467c-b5e1-0f62b4c55ac6",
+      "clientId": "catalogue-service-swagger-ui",
+      "name": "",
+      "description": "",
+      "rootUrl": "http://localhost:8081/swagger-ui/",
+      "adminUrl": "http://localhost:8081/swagger-ui/",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [
+        "http://localhost:8081/swagger-ui/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "frontchannel.logout.session.required": "true",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "display.on.consent.screen": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "edit_catalogue",
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "view_catalogue",
         "microprofile-jwt"
       ]
     },
@@ -784,6 +921,65 @@
       "nodeReRegistrationTimeout": -1,
       "defaultClientScopes": [
         "service_account",
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "edit_catalogue",
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "view_catalogue",
+        "microprofile-jwt"
+      ]
+    },
+    {
+      "id": "7d978255-550c-4ac3-960e-a0cd9b26a112",
+      "clientId": "feedback-service-swagger-ui",
+      "name": "",
+      "description": "",
+      "rootUrl": "http://localhost:8084/webjars/swagger-ui",
+      "adminUrl": "http://localhost:8084/webjars/swagger-ui",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [
+        "http://localhost:8084/swagger-ui/*",
+        "http://localhost:8084/webjars/swagger-ui/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8084"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "frontchannel.logout.session.required": "true",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "display.on.consent.screen": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
         "web-origins",
         "acr",
         "roles",
@@ -1169,6 +1365,18 @@
           }
         }
       ]
+    },
+    {
+      "id": "57c1d167-da88-49d1-a2c6-20949254cf8f",
+      "name": "metrics",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false",
+        "gui.order": "",
+        "consent.screen.text": ""
+      }
     },
     {
       "id": "cb0b7ced-8c71-49b0-ab0b-42a30bfed7cf",
@@ -1693,7 +1901,8 @@
     "microprofile-jwt",
     "organization",
     "edit_catalogue",
-    "view_catalogue"
+    "view_catalogue",
+    "metrics"
   ],
   "browserSecurityHeaders": {
     "contentSecurityPolicyReportOnly": "",
