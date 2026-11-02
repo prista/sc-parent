@@ -29,6 +29,10 @@ server:
 logging:
   level:
     sql: info
+#  file:  # чтобы видеть логи на админке
+#    name: logs/catalogue-service.log
+#  pattern:
+#    file: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID}){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
 springdoc:
   swagger-ui:
     oauth:
@@ -36,3 +40,13 @@ springdoc:
       use-pkce-with-authorization-code-grant: true
 keycloak:
   uri: http://localhost:8082
+management:
+  health:
+    livenessstate: ## живое ли приложение
+      enabled: true
+    readinessstate: ## можно ли вообще от сервиса этого что-то получить
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
