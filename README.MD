@@ -17,7 +17,7 @@ kill -9 <PID>
 
 ## OAuth2 Flow
 
-Роли: `manager-app` — OAuth2 клиент, `catalogue-service` — resource server, Keycloak (realm `selmag`) — IdP.
+Роли: `manager-app` и `customer-app` — OAuth2 клиенты, `catalogue-service` и `feedback-service` — resource servers, `admin-server` — одновременно resource server (для регистрации инстансов), OAuth2-клиент для своего UI и `client_credentials`-клиент для опроса актуаторов, Keycloak (realm `selmag`) — IdP. Мониторинговые flow разобраны в разделе «Spring Boot Admin» ниже.
 
 1. Браузер → `manager-app` (сессии нет) → редирект на Keycloak (`oauth2Login`).
 2. Юзер логинится в Keycloak; обратно приходит `authorization_code`.
@@ -89,6 +89,8 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 
 - чтение (`GET`) → `SCOPE_view_catalogue`;
 - запись (`POST`/`PATCH`/`DELETE`) → `SCOPE_edit_catalogue`;
+- `/actuator/**` → `SCOPE_metrics` (этим пользуется `admin-server`);
+- Swagger UI/docs (`/swagger-ui/**`, `/v3/api-docs/**`, …) → `permitAll()`;
 - всё остальное → `denyAll`.
 
 **`manager-app` — OAuth2 client в двух ролях одновременно** (но **не** resource server):
@@ -110,6 +112,71 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 - ✅ `catalogue-service`, проверка `SCOPE_*`: `ProductsRestControllerIT` / `ProductRestControllerIT` через `.with(jwt().jwt(b -> b.claim("scope", "view_catalogue"/"edit_catalogue")))` — в т.ч. негативный кейс (валидный JWT без нужного scope → 403).
 - ✅ `manager-app`, проверка `ROLE_MANAGER`: IT-тесты контроллеров (`..._UserIsNotAuthorized_ReturnsForbidden`) — `.with(user("j.daniels"))` без роли → 403.
 - ✅ token relay: `OAuthClientHttpRequestInterceptorTest` — проверяет, что при отсутствии `Authorization` интерцептор добавляет `Bearer token`.
+
+## Spring Boot Admin: `admin-server` и метрики
+
+`admin-server` (порт `8085`, Spring Boot Admin Server 4.0.4) собирает health/metrics/env со всех зарегистрированных инстансов и показывает их в UI. Сейчас в нём регистрируется `catalogue-service`.
+
+### Три роли admin-server
+
+| Роль | Что делает | Как аутентифицируется |
+|---|---|---|
+| Resource server | принимает регистрацию инстансов (`POST /instances`) | JWT с `SCOPE_metrics_server` |
+| OAuth2 login client | пускает человека в UI админки | authorization code, регистрация `login`, клиент `admin-service` |
+| OAuth2 client (`client_credentials`) | опрашивает `/actuator/**` инстансов | регистрация `keycloak`, клиент `admin-service`, scope `metrics` |
+
+Отсюда две регистрации в `admin-server/src/main/resources/application-standalone.yaml`:
+
+- `keycloak` — `client_credentials`, без пользователя, для исходящих запросов к актуаторам;
+- `login` — `authorization_code` (grant type не указан → дефолт) + `openid`, для `oauth2Login`.
+
+Одной регистрацией не обойтись: у `ClientRegistration` ровно один grant type, а `client_credentials` не умеет логинить браузерного пользователя.
+
+Две цепочки фильтров (`SecurityConfig`) разделены по заголовку: запрос с `Authorization: Bearer …` попадает в resource-server-цепочку (`SCOPE_metrics_server`), всё остальное — в UI-цепочку (`oauth2Login`, `anyRequest().authenticated()`). Порядок задан через `@Priority(0)` / `@Priority(1)`.
+
+### Два разных scope
+
+| Scope | Кто запрашивает | Кто проверяет | Зачем |
+|---|---|---|---|
+| `metrics` | `admin-service` (client_credentials) | `catalogue-service`, правило `/actuator/**` | админка читает метрики инстанса |
+| `metrics_server` | `catalogue-service-metrics-client` (client_credentials) | `admin-server`, цепочка для запросов с `Authorization: Bearer` | инстанс сам регистрируется в админке |
+
+Легко перепутать: `SCOPE_metrics` — «мне можно читать метрики», `SCOPE_metrics_server` — «мне можно пользоваться сервером метрик (регистрироваться в нём)».
+
+### Что придётся добавить в Keycloak вручную
+
+`config/keycloak/import/realm-export.json` уже содержит оба scope и оба клиента (`admin-service`, `catalogue-service-metrics-client`), но `--import-realm` применяет экспорт **только при первом создании realm**. Если контейнер `selmag-keycloak` уже существует, добавьте руками:
+
+1. **Client scopes → Create client scope**: name `metrics_server`, protocol `openid-connect`, `Include in token scope` = on. Мапперы не нужны.
+2. **Clients → Create client**: `catalogue-service-metrics-client`, `Client authentication` = on (confidential), `Service accounts roles` = on, `Standard flow` = off. В `Client scopes` добавить `metrics_server` как **Optional**. Секрет скопировать в `catalogue-service/src/main/resources/application-standalone.yaml` (`spring.security.oauth2.client.registration.keycloak.client-secret`).
+3. **Clients → `admin-service`**: `Standard flow` = on (вход в UI), `Service accounts roles` = on (`client_credentials`), `Root URL` = `http://localhost:8085`, `Valid redirect URIs` = `/*`, `Web origins` = `/*`. Проверить, что `metrics` есть в `Client scopes → Optional`.
+4. Убедиться, что оба scope включены в `optionalClientScopes` нужных клиентов — иначе Keycloak проигнорирует запрошенный scope, и в токене не будет ни `SCOPE_metrics`, ни `SCOPE_metrics_server` (получите `403`).
+
+`metrics` и `metrics_server` — кастомные client scopes (как `view_catalogue` / `edit_catalogue`), в дефолтном realm Keycloak их нет.
+
+### Как проверить, что scope выдаётся
+
+```bash
+# токен для регистрации в админке (metrics_server)
+curl -s -X POST http://localhost:8082/realms/selmag/protocol/openid-connect/token \
+  -d grant_type=client_credentials \
+  -d client_id=catalogue-service-metrics-client \
+  -d client_secret=XzsC20nVY1uDO1xDAE1o7QsqkRqRyban \
+  -d scope=metrics_server | jq -r .access_token | python3 -c "import sys,base64,json; t=sys.stdin.read().strip().split('.')[1]; t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))['scope'])"
+
+# токен для чтения метрик (metrics)
+curl -s -X POST http://localhost:8082/realms/selmag/protocol/openid-connect/token \
+  -d grant_type=client_credentials \
+  -d client_id=admin-service \
+  -d client_secret=KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3 \
+  -d scope=metrics | jq -r .access_token | python3 -c "import sys,base64,json; t=sys.stdin.read().strip().split('.')[1]; t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t))['scope'])"
+```
+
+В выводе должен быть `metrics_server` / `metrics` соответственно.
+
+### Регистрация в `catalogue-service`
+
+`catalogue-service` — SBA-клиент (`spring-boot-admin-starter-client` 4.0.4). Штатный `RestClientRegistrationClient` (в SBA 4 `BlockingRegistrationClient` больше нет) не умеет OAuth, поэтому `security/ClientConfig` подменяет бин `RegistrationClient`: `RestClient` с interceptor'ом, который берёт `client_credentials`-токен через `AuthorizedClientServiceOAuth2AuthorizedClientManager` и подставляет `Authorization: Bearer …`. Бин включается только при `spring.boot.admin.client.enabled=true`; в `application-standalone.yaml` также задан `service-host-type: ip`, чтобы админка ходила на инстанс по IP, а не по hostname.
 
 ## Тестирование
 

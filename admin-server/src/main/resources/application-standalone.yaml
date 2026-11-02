@@ -3,6 +3,11 @@ server:
 spring:
   security:
     oauth2:
+      # это одноврменно и ресурс сервер (для регистрируемых клиентов админки)
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
+      # и просто клиент, который коннектится к catalogue-service (ресурс серверу тоже)
       client:
         provider:
           keycloak:
@@ -12,5 +17,12 @@ spring:
             authorization-grant-type: client_credentials
             scope:
               - metrics
+            client-id: admin-service
+            client-secret: KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3
+          login:
+            provider: keycloak
+            scope:
+              - metrics
+              - openid
             client-id: admin-service
             client-secret: KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3

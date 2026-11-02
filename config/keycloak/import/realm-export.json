@@ -321,6 +321,7 @@
       ],
       "manager-app": [],
       "security-admin-console": [],
+      "catalogue-service-metrics-client": [],
       "admin-cli": [],
       "catalogue-service-swagger-ui": [],
       "customer-app": [],
@@ -512,6 +513,22 @@
       "enabled": true,
       "totp": false,
       "serviceAccountClientId": "admin-service",
+      "disableableCredentialTypes": [],
+      "requiredActions": [],
+      "realmRoles": [
+        "default-roles-selmag"
+      ],
+      "notBefore": 0,
+      "groups": []
+    },
+    {
+      "id": "ee666293-7878-4998-be74-c8c57a97ffce",
+      "username": "service-account-catalogue-service-metrics-client",
+      "emailVerified": false,
+      "createdTimestamp": 1793625936749,
+      "enabled": true,
+      "totp": false,
+      "serviceAccountClientId": "catalogue-service-metrics-client",
       "disableableCredentialTypes": [],
       "requiredActions": [],
       "realmRoles": [
@@ -726,7 +743,7 @@
       "clientId": "admin-service",
       "name": "",
       "description": "",
-      "rootUrl": "",
+      "rootUrl": "http://localhost:8085",
       "adminUrl": "",
       "baseUrl": "",
       "surrogateAuthRequired": false,
@@ -743,7 +760,7 @@
       "notBefore": 0,
       "bearerOnly": false,
       "consentRequired": false,
-      "standardFlowEnabled": false,
+      "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
@@ -755,7 +772,9 @@
         "oidc.ciba.grant.enabled": "false",
         "client.secret.creation.time": "1793175849",
         "backchannel.logout.session.required": "true",
+        "frontchannel.logout.session.required": "true",
         "oauth2.device.authorization.grant.enabled": "false",
+        "display.on.consent.screen": "false",
         "backchannel.logout.revoke.offline.tokens": "false"
       },
       "authenticationFlowBindingOverrides": {},
@@ -820,6 +839,67 @@
         "phone",
         "offline_access",
         "organization",
+        "microprofile-jwt"
+      ]
+    },
+    {
+      "id": "060f8378-3888-468e-a5fe-8f149faf7c48",
+      "clientId": "catalogue-service-metrics-client",
+      "name": "",
+      "description": "",
+      "rootUrl": "",
+      "adminUrl": "",
+      "baseUrl": "",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "XzsC20nVY1uDO1xDAE1o7QsqkRqRyban",
+      "redirectUris": [
+        "/*"
+      ],
+      "webOrigins": [
+        "/*"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "client.secret.creation.time": "1793625936",
+        "backchannel.logout.session.required": "true",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "service_account",
+        "web-origins",
+        "acr",
+        "roles",
+        "profile",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "edit_catalogue",
+        "address",
+        "phone",
+        "offline_access",
+        "organization",
+        "metrics_server",
+        "view_catalogue",
+        "metrics",
         "microprofile-jwt"
       ]
     },
@@ -1424,6 +1504,18 @@
       ]
     },
     {
+      "id": "1b91c750-1648-476f-a37a-d1d6164845bc",
+      "name": "metrics_server",
+      "description": "",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false",
+        "gui.order": "",
+        "consent.screen.text": ""
+      }
+    },
+    {
       "id": "98fc2c21-3592-43c6-b1bf-fb253789c27d",
       "name": "phone",
       "description": "OpenID Connect built-in scope: phone",
@@ -1902,7 +1994,8 @@
     "organization",
     "edit_catalogue",
     "view_catalogue",
-    "metrics"
+    "metrics",
+    "metrics_server"
   ],
   "browserSecurityHeaders": {
     "contentSecurityPolicyReportOnly": "",

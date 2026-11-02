@@ -1,8 +1,10 @@
 package com.drm.sandbox.admin.config;
 
 import com.drm.sandbox.admin.web.client.OAuthHttpHeadersProvider;
+import jakarta.annotation.Priority;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
@@ -11,6 +13,8 @@ import org.springframework.security.oauth2.client.AuthorizedClientServiceOAuth2A
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
+
+import java.util.Optional;
 
 @Configuration
 public class SecurityConfig {
@@ -27,14 +31,30 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    @Priority(0)
+    public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) {
         return http
-                .oauth2Client(Customizer.withDefaults())
+                .securityMatcher(request ->
+                        Optional.ofNullable(request.getHeader(HttpHeaders.AUTHORIZATION))
+                                .map(header -> header.startsWith("Bearer ")).orElse(false))
+                .oauth2ResourceServer(customizer ->
+                        customizer.jwt(Customizer.withDefaults()))
                 .authorizeHttpRequests(customizer ->
-                        customizer.anyRequest().permitAll())
+                        customizer.anyRequest().hasAuthority("SCOPE_metrics_server"))
                 .sessionManagement(customizer ->
                         customizer.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(CsrfConfigurer::disable)
+                .build();
+    }
+
+    @Bean
+    @Priority(1)
+    public SecurityFilterChain uiSecurityFilterChain(HttpSecurity http) {
+        return http
+                .oauth2Client(Customizer.withDefaults())
+                .oauth2Login(Customizer.withDefaults())
+                .authorizeHttpRequests(customizer ->
+                        customizer.anyRequest().authenticated())
                 .build();
     }
 }
