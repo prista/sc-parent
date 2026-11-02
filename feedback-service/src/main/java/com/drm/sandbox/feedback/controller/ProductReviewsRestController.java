@@ -3,6 +3,8 @@ package com.drm.sandbox.feedback.controller;
 import com.drm.sandbox.feedback.controller.payload.NewProductReviewPayload;
 import com.drm.sandbox.feedback.entity.ProductReview;
 import com.drm.sandbox.feedback.service.ProductReviewsService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,9 @@ public class ProductReviewsRestController {
     // The \\d+ regex restricts the path variable to digits,
     // so non-numeric IDs fail to match the route (404) instead of hitting type conversion (400).
     @GetMapping("by-product-id/{productId:\\d+}")
+    @Operation(
+            security = @SecurityRequirement(name = "keycloak")
+    )
     public Flux<ProductReview> findProductReviewsByProductId(@PathVariable("productId") int productId) {
         return this.productReviewsService.findProductReviewsByProduct(productId);
     }
