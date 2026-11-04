@@ -17,7 +17,7 @@ kill -9 <PID>
 
 ## OAuth2 Flow
 
-Роли: `manager-app` и `customer-app` — OAuth2 клиенты, `catalogue-service` и `feedback-service` — resource servers, `admin-server` — одновременно resource server (для регистрации инстансов), OAuth2-клиент для своего UI и `client_credentials`-клиент для опроса актуаторов, Keycloak (realm `selmag`) — IdP. Мониторинговые flow разобраны в разделе «Spring Boot Admin» ниже.
+Роли: `manager-app` и `customer-app` — OAuth2 клиенты, `catalogue-service` и `feedback-service` — resource servers (и оба же — Spring Boot Admin-клиенты, регистрирующиеся в `admin-server`), `admin-server` — одновременно resource server (для регистрации инстансов), OAuth2-клиент для своего UI и `client_credentials`-клиент для опроса актуаторов, Keycloak (realm `selmag`) — IdP. Мониторинговые flow разобраны в разделе «Spring Boot Admin» ниже.
 
 1. Браузер → `manager-app` (сессии нет) → редирект на Keycloak (`oauth2Login`).
 2. Юзер логинится в Keycloak; обратно приходит `authorization_code`.
@@ -115,7 +115,7 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 
 ## Spring Boot Admin: `admin-server` и метрики
 
-`admin-server` (порт `8085`, Spring Boot Admin Server 4.0.4) собирает health/metrics/env со всех зарегистрированных инстансов и показывает их в UI. Сейчас в нём регистрируется `catalogue-service`.
+`admin-server` (порт `8085`, Spring Boot Admin Server 4.0.4) собирает health/metrics/env со всех зарегистрированных инстансов и показывает их в UI. Сейчас в нём регистрируются `catalogue-service` и `feedback-service` — у каждого свой SBA-клиент и свой service-account-клиент в Keycloak.
 
 ### Три роли admin-server
 
@@ -138,17 +138,17 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 
 | Scope | Кто запрашивает | Кто проверяет | Зачем |
 |---|---|---|---|
-| `metrics` | `admin-service` (client_credentials) | `catalogue-service`, правило `/actuator/**` | админка читает метрики инстанса |
-| `metrics_server` | `catalogue-service-metrics-client` (client_credentials) | `admin-server`, цепочка для запросов с `Authorization: Bearer` | инстанс сам регистрируется в админке |
+| `metrics` | `admin-service` (client_credentials) | `catalogue-service` и `feedback-service`, правило `/actuator/**` | админка читает метрики инстанса |
+| `metrics_server` | `catalogue-service-metrics-client` / `feedback-service-metrics-client` (client_credentials) | `admin-server`, цепочка для запросов с `Authorization: Bearer` | инстанс сам регистрируется в админке |
 
 Легко перепутать: `SCOPE_metrics` — «мне можно читать метрики», `SCOPE_metrics_server` — «мне можно пользоваться сервером метрик (регистрироваться в нём)».
 
 ### Что придётся добавить в Keycloak вручную
 
-`config/keycloak/import/realm-export.json` уже содержит оба scope и оба клиента (`admin-service`, `catalogue-service-metrics-client`), но `--import-realm` применяет экспорт **только при первом создании realm**. Если контейнер `selmag-keycloak` уже существует, добавьте руками:
+`config/keycloak/import/realm-export.json` уже содержит оба scope и клиентов `admin-service`, `catalogue-service-metrics-client`, `feedback-service-metrics-client`, но `--import-realm` применяет экспорт **только при первом создании realm**. Если контейнер `selmag-keycloak` уже существует, добавьте руками:
 
 1. **Client scopes → Create client scope**: name `metrics_server`, protocol `openid-connect`, `Include in token scope` = on. Мапперы не нужны.
-2. **Clients → Create client**: `catalogue-service-metrics-client`, `Client authentication` = on (confidential), `Service accounts roles` = on, `Standard flow` = off. В `Client scopes` добавить `metrics_server` как **Optional**. Секрет скопировать в `catalogue-service/src/main/resources/application-standalone.yaml` (`spring.security.oauth2.client.registration.keycloak.client-secret`).
+2. **Clients → Create client**: `catalogue-service-metrics-client` и `feedback-service-metrics-client`, у обоих `Client authentication` = on (confidential), `Service accounts roles` = on, `Standard flow` = off. В `Client scopes` добавить `metrics_server` как **Optional**. Секреты скопировать в `catalogue-service/…/application-standalone.yaml` и `feedback-service/…/application-standalone.yml` (`spring.security.oauth2.client.registration.keycloak.client-secret`).
 3. **Clients → `admin-service`**: `Standard flow` = on (вход в UI), `Service accounts roles` = on (`client_credentials`), `Root URL` = `http://localhost:8085`, `Valid redirect URIs` = `/*`, `Web origins` = `/*`. Проверить, что `metrics` есть в `Client scopes → Optional`.
 4. Убедиться, что оба scope включены в `optionalClientScopes` нужных клиентов — иначе Keycloak проигнорирует запрошенный scope, и в токене не будет ни `SCOPE_metrics`, ни `SCOPE_metrics_server` (получите `403`).
 
@@ -174,9 +174,19 @@ curl -s -X POST http://localhost:8082/realms/selmag/protocol/openid-connect/toke
 
 В выводе должен быть `metrics_server` / `metrics` соответственно.
 
-### Регистрация в `catalogue-service`
+### Регистрация инстансов: `catalogue-service` и `feedback-service`
 
-`catalogue-service` — SBA-клиент (`spring-boot-admin-starter-client` 4.0.4). Штатный `RestClientRegistrationClient` (в SBA 4 `BlockingRegistrationClient` больше нет) не умеет OAuth, поэтому `security/ClientConfig` подменяет бин `RegistrationClient`: `RestClient` с interceptor'ом, который берёт `client_credentials`-токен через `AuthorizedClientServiceOAuth2AuthorizedClientManager` и подставляет `Authorization: Bearer …`. Бин включается только при `spring.boot.admin.client.enabled=true`; в `application-standalone.yaml` также задан `service-host-type: ip`, чтобы админка ходила на инстанс по IP, а не по hostname.
+Оба сервиса — SBA-клиенты (`spring-boot-admin-starter-client` 4.0.4). Штатный `RestClientRegistrationClient` не умеет OAuth, поэтому в каждом модуле свой `config/ClientConfig` подменяет бин `RegistrationClient`: `RestClient` с interceptor'ом, который берёт `client_credentials`-токен и подставляет `Authorization: Bearer …`. Бин включается только при `spring.boot.admin.client.enabled=true`; в `application-standalone` также задан `service-host-type: ip`, чтобы админка ходила на инстанс по IP, а не по hostname.
+
+Разница — в способе получения токена:
+
+| | `catalogue-service` (servlet) | `feedback-service` (reactive) |
+|---|---|---|
+| Менеджер токена | `AuthorizedClientServiceOAuth2AuthorizedClientManager` | `AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager` |
+| Как отдаёт токен | синхронно (`authorize(...)` → `OAuth2AuthorizedClient`) | `Mono`, поэтому interceptor делает `.block()` |
+| Keycloak-клиент | `catalogue-service-metrics-client` | `feedback-service-metrics-client` |
+
+Почему в реактивном сервисе `block()`: в SBA 4.0 убрали `ReactiveRegistrationClient`, и регистрация теперь **всегда** идёт блокирующим `RestClientRegistrationClient` (реактивной осталась только `ReactiveApplicationFactory`, вычисляющая URL инстанса). Interceptor вызывается из планировщика регистрации SBA (`ThreadPoolTaskScheduler`, не event loop Reactor'а), поэтому блокировка безопасна. `RestClient.Builder` в WebFlux-приложении есть — его даёт `spring-boot-starter-restclient`, приходящий с `spring-boot-starter-webflux`.
 
 ## Тестирование
 
