@@ -3,6 +3,7 @@ package com.drm.sandbox.feedback.controller;
 import com.drm.sandbox.feedback.controller.payload.NewFavouriteProductPayload;
 import com.drm.sandbox.feedback.entity.FavouriteProduct;
 import com.drm.sandbox.feedback.service.FavouriteProductsService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,9 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/api/v1/feedback-api/favourite-products")
 @RequiredArgsConstructor
+// Swagger UI подставляет Bearer-токен только в операции, у которых объявлено security,
+// иначе запросы из Try it out уходят без заголовка и получают 401.
+@SecurityRequirement(name = "keycloak")
 public class FavouriteProductsRestController {
     private final FavouriteProductsService favouriteProductsService;
 

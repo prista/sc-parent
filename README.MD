@@ -266,6 +266,8 @@ OpenAPI-спецификацию параллельно с REST Docs отдаю�
 - `webOrigins: ["+"]`;
 - `edit_catalogue` / `view_catalogue` — в `optionalClientScopes`, чтобы их можно было запросить.
 
+Все операции помечены `@SecurityRequirement(name = "keycloak", scopes = …)`: `GET` — `view_catalogue`, `POST` / `PATCH` / `DELETE` — `edit_catalogue`. Без этой аннотации Swagger UI не подставляет `Authorization` (см. «Подводные камни»).
+
 ### `feedback-service` (WebFlux)
 
 Та же схема, но клиент реактивный, и кастомных scope'ов у сервиса нет: `SecurityConfig` требует только аутентификацию (`anyExchange().authenticated()`), поэтому в `@SecurityScheme` достаточно дефолтных `openid` / `microprofile-jwt` (это отмечено комментарием в `FeedbackServiceApplication`).
@@ -278,7 +280,7 @@ OpenAPI-спецификацию параллельно с REST Docs отдаю�
 
 Клиент `feedback-service-swagger-ui` в Keycloak: публичный, PKCE, `redirectUris: ["http://localhost:8084/swagger-ui/*", "http://localhost:8084/webjars/swagger-ui/*"]`, `webOrigins: ["http://localhost:8084"]`.
 
-`@SecurityRequirement(name = "keycloak")` здесь выставлен только на `GET /api/v1/feedback-api/product-reviews/by-product-id/{productId}`. Остальные операции (создание отзыва, favourites) в спеке без `security`, хотя токен нужен всем — для них Try-it-out пойдёт без `Authorization` и получит 401.
+`@SecurityRequirement(name = "keycloak")` (без `scopes` — сервис проверяет только аутентификацию) выставлен на уровне классов `FavouriteProductsRestController` и `ProductReviewsRestController`, поэтому требование объявлено у **всех** операций спеки: создание отзыва, favourites, удаление из favourites.
 
 ### Откуда берётся путь `oauth2-redirect.html` (и при чём тут `webjars`)
 
@@ -326,6 +328,8 @@ curl -s -i -X POST http://localhost:8082/realms/selmag/protocol/openid-connect/t
 ### Подводные камни
 
 - `--import-realm` применяет `realm-export.json` только при **первом** создании реалма. Если контейнер `selmag-keycloak` уже существует, правки в файле на него не влияют: Web origins / Valid redirect URIs нужно править в консоли (Clients → `…-swagger-ui` → соответствующая вкладка) или пересоздавать контейнер.
-- Swagger UI подставляет `Authorization: Bearer` в Try-it-out только для операций, помеченных security-требованием. Оно задаётся **на операции** (`security = @SecurityRequirement(name = "keycloak")` в `@Operation`), а не глобально: сейчас так помечены `POST /catalogue-api/products` и `GET /api/v1/feedback-api/product-reviews/by-product-id/{productId}`. Остальные операции в спеке без требования — если их тоже нужно дергать из Swagger с токеном, аннотацию надо добавить и туда (или задать глобально через `@OpenAPIDefinition(security = …)`).
+- Swagger UI подставляет `Authorization: Bearer` в Try-it-out только для операций, у которых в OpenAPI-спеке объявлено security-требование. Если его нет, запрос уходит без заголовка, и resource server отвечает **401 Unauthorized** — именно этот симптом, а не 403: до проверки scope дело не доходит. Поэтому `@SecurityRequirement` нужен на **каждом** handler'е защищённого сервиса: в `catalogue-service` — на каждой операции со своим scope (`view_catalogue` для `GET`, `edit_catalogue` для `POST` / `PATCH` / `DELETE`), в `feedback-service` — один раз на уровне класса. Проверить спеку: `curl -s http://localhost:8081/v3/api-docs | jq '.paths[].get.security'` — у защищённых операций должно быть `[{"keycloak":["view_catalogue"]}]`, а не `null`.
+- Если в окне Authorize не отметить нужный scope, токен придёт без него и сервер ответит **403** (не 401): для `POST` / `PATCH` / `DELETE` в `catalogue-service` нужен `edit_catalogue`.
+- Добавили новый handler в resource server — добавьте ему `@SecurityRequirement`, иначе Try-it-out в Swagger UI будет получать 401, хотя токен уже введён.
 - Экспорт реалма из админки Keycloak **маскирует** `secret` клиентов как `"**********"`. Такой файл нельзя коммитить как есть: на чистом `--import-realm` секрет не совпадёт с тем, что прописан в `manager-app` / `customer-app` (`application-standalone.*`), и оба приложения сломаются на обмене `code` → token.
 - В scopes схемы, кроме дефолтных `openid` / `microprofile-jwt`, должны быть `view_catalogue` и `edit_catalogue` — иначе нужный scope не выбрать в окне Authorize, в токене не будет `SCOPE_edit_catalogue`, и `POST` вернёт 403. У клиента `catalogue-service-swagger-ui` оба scope'а лежат в `optionalClientScopes`.

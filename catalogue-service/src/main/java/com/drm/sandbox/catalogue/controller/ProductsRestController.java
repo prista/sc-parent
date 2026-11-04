@@ -28,13 +28,15 @@ public class ProductsRestController {
     private final ProductService productService;
 
     @GetMapping
+    @SecurityRequirement(name = "keycloak", scopes = "view_catalogue")
     public Iterable<Product> findProducts(@RequestParam(name = "filter", required = false) String filter) {
         return this.productService.findAllProducts(filter);
     }
 
     @PostMapping
     @Operation(
-            security = @SecurityRequirement(name = "keycloak"), // we can't work without this, (swagger-ui) because of the lack of a valid access token
+            // без этого Swagger UI не подставляет Bearer-токен в запрос (получаем 401)
+            security = @SecurityRequirement(name = "keycloak", scopes = "edit_catalogue"),
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     content = @Content(
                             mediaType = MediaType.APPLICATION_JSON_VALUE,

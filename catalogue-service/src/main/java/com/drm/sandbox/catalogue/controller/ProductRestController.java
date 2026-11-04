@@ -3,6 +3,7 @@ package com.drm.sandbox.catalogue.controller;
 import com.drm.sandbox.catalogue.controller.payload.UpdateProductPayload;
 import com.drm.sandbox.catalogue.entity.Product;
 import com.drm.sandbox.catalogue.service.ProductService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.MessageSource;
@@ -30,11 +31,13 @@ public class ProductRestController {
     }
 
     @GetMapping
+    @SecurityRequirement(name = "keycloak", scopes = "view_catalogue")
     public Product findProduct(@ModelAttribute("product") Product product) {
         return product;
     }
 
     @PatchMapping
+    @SecurityRequirement(name = "keycloak", scopes = "edit_catalogue")
     public ResponseEntity<?> updateProduct(@PathVariable("productId") int productId,
                                            @Valid @RequestBody UpdateProductPayload payload,
                                            BindingResult bindingResult) throws BindException {
@@ -51,6 +54,7 @@ public class ProductRestController {
     }
 
     @DeleteMapping
+    @SecurityRequirement(name = "keycloak", scopes = "edit_catalogue")
     public ResponseEntity<Void> deleteProduct(@PathVariable("productId") int productId) {
         this.productService.deleteProduct(productId);
         return ResponseEntity.noContent().build();
