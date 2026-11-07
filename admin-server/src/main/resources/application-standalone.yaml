@@ -26,3 +26,10 @@ spring:
               - openid
             client-id: admin-service
             client-secret: KXdsQtVJQ0vmY5TKY1VzVEPozgfQttV3
+management: # specify export metrics, which one should be exposed
+  endpoints:
+    web:
+      exposure:
+        include:
+          - health
+          - prometheus

@@ -5,6 +5,7 @@ import jakarta.annotation.Priority;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
@@ -34,15 +35,16 @@ public class SecurityConfig {
     @Priority(0)
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) {
         return http
-                .securityMatcher(request ->
-                        Optional.ofNullable(request.getHeader(HttpHeaders.AUTHORIZATION))
-                                .map(header -> header.startsWith("Bearer ")).orElse(false))
-                .oauth2ResourceServer(customizer ->
-                        customizer.jwt(Customizer.withDefaults()))
-                .authorizeHttpRequests(customizer ->
-                        customizer.anyRequest().hasAuthority("SCOPE_metrics_server"))
-                .sessionManagement(customizer ->
-                        customizer.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .securityMatchers(customizer -> customizer
+                        .requestMatchers(HttpMethod.POST, "/instances")
+                        .requestMatchers(HttpMethod.DELETE, "/instances/*")
+                        .requestMatchers("/actuator/**"))
+                .oauth2ResourceServer(customizer -> customizer.jwt(Customizer.withDefaults()))
+                .authorizeHttpRequests(customizer -> customizer.requestMatchers("/instances", "/instances/*")
+                        .hasAuthority("SCOPE_metrics_server")
+                        .requestMatchers("/actuator/**").permitAll() //.hasAuthority("SCOPE_metrics")
+                        .anyRequest().denyAll())
+                .sessionManagement(customizer -> customizer.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .csrf(CsrfConfigurer::disable)
                 .build();
     }
