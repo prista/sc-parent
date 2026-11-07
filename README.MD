@@ -15,6 +15,8 @@ kill -9 <PID>
 
 `--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
+**Зачем VictoriaMetrics.** Приложения не отправляют метрики сами — они лишь экспонируют текущий снимок на `/actuator/prometheus`, а `selmag-metrics` раз в ~15 с скрапит его (`config/victoria-metrics/promscrape.yaml`) и хранит сэмплы с таймстампами в своей TSDB. Поэтому история переживает падение и рестарт приложения (Spring Boot Admin показывает только «сейчас»), виден сам факт падения (`up{job="…"} == 0`, разрыв в скрапах) и значения до него, а все сервисы собираются в одном месте — по этой истории строятся дашборды и алерты. Посмотреть метрики — `http://localhost:8428/vmui/`; Grafana — отдельный слой визуализации поверх VM, для базового просмотра не обязательна.
+
 ## SSR
 
 `manager-app` — это **SSR** (Server-Side Rendering): HTML-страницы собираются на сервере из Thymeleaf-шаблонов и отдаются браузеру уже готовыми, а не рендерятся на клиенте JavaScript'ом (как в JS-SPA). В интеграционных тестах это видно по проверкам `view().name("...")` и `model().attribute(...)` — сервер сам решает, какой шаблон отдать и что положить в модель.
