@@ -8,6 +8,8 @@ docker run --name feedback-db -p 27017:27017 mongo:8
 
 docker exec -it feedback-db mongosh feedback
 
+docker run --name selmag-metrics -p 8428:8428 -v ./config/victoria-metrics/promscrape.yaml:/promscrape.yaml victoriametrics/victoria-metrics:v1.155.0 -promscrape.config=promscrape.yaml
+
 lsof -i tcp:3000
 kill -9 <PID>
 

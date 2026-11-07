@@ -1,73 +1,75 @@
-scrape_configs:
-  - job_name: selmag_admin_service
+scrape_configs: # тут перечисляем array источников метрик
+  - job_name: selmag_admin_service # имя задачи в VictoriaMetrics (под ним видно статистику скрапа)
+    # далее указваем откуда брать метрики (хосты и порты)
     static_configs:
-      # 172.17.0.1 — это IP-адрес шлюза (gateway) стандартной virtual сети Docker
-      # 127.0.0.1 - IP-address of each container itself
-      - targets: ["http://172.17.0.1:8085"]
+      # хост (наши Spring-приложения) из контейнера доступен по host.docker.internal (Docker Desktop на macOS)
+      # 127.0.0.1 внутри контейнера — это сам контейнер
+      - targets: ["http://host.docker.internal:8085"] # root path
         labels:
-          application: selmag-admin-service
-    metrics_path: /actuator/prometheus
-    oauth2:
-      client_id: victoria-metrics
-      client_secret: vTpeB59Sb2Qzh0HI4cXBlewm2ivY0dzD
-      token_url: http://172.17.0.1:8082/realms/selmag/protocol/openid-connect/token
+          application: selmag-admin-service # метка, по которой группируем/фильтруем метрики сервиса
+    metrics_path: /actuator/prometheus # other part of path (targets + metrics_path = полный URL)
+    oauth2: # токен из Keycloak для защищённых /actuator/** (у admin-server сейчас permitAll — блок не обязателен)
+      client_id: victoria-metrics # сервисный клиент в Keycloak (client_credentials)
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      # этот урл берется из http://localhost:8082/realms/selmag/.well-known/openid-configuration
+      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token # эндпоинт выдачи токена
       scopes:
-        - metrics
+        - metrics # scope токена (у catalogue/feedback /actuator/** требует SCOPE_metrics)
       endpoint_params:
-        grant_type: client_credentials
-  - job_name: selmag_catalogue_service
-    static_configs:
-      - targets: ["http://172.17.0.1:8081"]
-        labels:
-          application: selmag-catalogue-service
-    metrics_path: /actuator/prometheus
-    oauth2:
-      client_id: victoria-metrics
-      client_secret: vTpeB59Sb2Qzh0HI4cXBlewm2ivY0dzD
-      token_url: http://172.17.0.1:8082/realms/selmag/protocol/openid-connect/token
-      scopes:
-        - metrics
-      endpoint_params:
-        grant_type: client_credentials
-  - job_name: selmag_feedback_service
-    static_configs:
-      - targets: ["http://172.17.0.1:8084"]
-        labels:
-          application: selmag-feedback-service
-    metrics_path: /actuator/prometheus
-    oauth2:
-      client_id: victoria-metrics
-      client_secret: vTpeB59Sb2Qzh0HI4cXBlewm2ivY0dzD
-      token_url: http://172.17.0.1:8082/realms/selmag/protocol/openid-connect/token
-      scopes:
-        - metrics
-      endpoint_params:
-        grant_type: client_credentials
-  - job_name: selmag_customer_app
-    static_configs:
-      - targets: ["http://172.17.0.1:8083"]
-        labels:
-          application: selmag-customer-app
-    metrics_path: /actuator/prometheus
-    oauth2:
-      client_id: victoria-metrics
-      client_secret: vTpeB59Sb2Qzh0HI4cXBlewm2ivY0dzD
-      token_url: http://172.17.0.1:8082/realms/selmag/protocol/openid-connect/token
-      scopes:
-        - metrics
-      endpoint_params:
-        grant_type: client_credentials
-  - job_name: selmag_manager_app
-    static_configs:
-      - targets: ["http://172.17.0.1:8080"]
-        labels:
-          application: selmag-manager-app
-    metrics_path: /actuator/prometheus
-    oauth2:
-      client_id: victoria-metrics
-      client_secret: vTpeB59Sb2Qzh0HI4cXBlewm2ivY0dzD
-      token_url: http://172.17.0.1:8082/realms/selmag/protocol/openid-connect/token
-      scopes:
-        - metrics
-      endpoint_params:
-        grant_type: client_credentials
+        grant_type: client_credentials # получаем токен без участия пользователя
+#  - job_name: selmag_catalogue_service
+#    static_configs:
+#      - targets: ["http://host.docker.internal:8081"]
+#        labels:
+#          application: selmag-catalogue-service
+#    metrics_path: /actuator/prometheus
+#    oauth2:
+#      client_id: victoria-metrics
+#      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+#      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
+#      scopes:
+#        - metrics
+#      endpoint_params:
+#        grant_type: client_credentials
+#  - job_name: selmag_feedback_service
+#    static_configs:
+#      - targets: ["http://host.docker.internal:8084"]
+#        labels:
+#          application: selmag-feedback-service
+#    metrics_path: /actuator/prometheus
+#    oauth2:
+#      client_id: victoria-metrics
+#      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+#      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
+#      scopes:
+#        - metrics
+#      endpoint_params:
+#        grant_type: client_credentials
+#  - job_name: selmag_customer_app
+#    static_configs:
+#      - targets: ["http://host.docker.internal:8083"]
+#        labels:
+#          application: selmag-customer-app
+#    metrics_path: /actuator/prometheus
+#    oauth2:
+#      client_id: victoria-metrics
+#      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+#      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
+#      scopes:
+#        - metrics
+#      endpoint_params:
+#        grant_type: client_credentials
+#  - job_name: selmag_manager_app
+#    static_configs:
+#      - targets: ["http://host.docker.internal:8080"]
+#        labels:
+#          application: selmag-manager-app
+#    metrics_path: /actuator/prometheus
+#    oauth2:
+#      client_id: victoria-metrics
+#      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+#      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
+#      scopes:
+#        - metrics
+#      endpoint_params:
+#        grant_type: client_credentials
