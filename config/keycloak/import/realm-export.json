@@ -604,6 +604,60 @@
       ],
       "notBefore": 0,
       "groups": []
+    },
+    {
+      "id": "c354bb52-c41a-4adb-aa7e-8829c7d2e320",
+      "username": "j.daniels",
+      "firstName": "Jack",
+      "lastName": "Daniels",
+      "email": "j.daniels@example.com",
+      "emailVerified": true,
+      "createdTimestamp": 1794058546370,
+      "enabled": true,
+      "totp": false,
+      "disableableCredentialTypes": [],
+      "requiredActions": [],
+      "realmRoles": [
+        "default-roles-selmag"
+      ],
+      "notBefore": 0,
+      "groups": [
+        "/customers"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "id": "386464b1-16d1-407c-80c3-0f09e3cd42bb",
+      "username": "j.dewar",
+      "firstName": "John",
+      "lastName": "Dewar",
+      "email": "j.dewar@example.com",
+      "emailVerified": true,
+      "createdTimestamp": 1794058546370,
+      "enabled": true,
+      "totp": false,
+      "disableableCredentialTypes": [],
+      "requiredActions": [],
+      "realmRoles": [
+        "default-roles-selmag"
+      ],
+      "notBefore": 0,
+      "groups": [
+        "/managers"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password",
+          "temporary": false
+        }
+      ]
     }
   ],
   "clients": [

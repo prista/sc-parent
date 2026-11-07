@@ -2,7 +2,7 @@ docker run --name catalogue-db -p 5432:5432 -e POSTGRES_DB=catalogue -e POSTGRES
 
 docker run --name manager-db -p 5433:5432 -e POSTGRES_DB=manager -e POSTGRES_USER=manager -e POSTGRES_PASSWORD=manager postgres:17.4-alpine
 
-docker run --name selmag-keycloak -p 8082:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin -v ./config/keycloak/import:/opt/keycloak/data/import quay.io/keycloak/keycloak:26.1.3 start-dev --import-realm
+docker run --name selmag-keycloak -p 8082:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin -v ./config/keycloak/import:/opt/keycloak/data/import quay.io/keycloak/keycloak:26.1.3 start-dev --import-realm --hostname=http://localhost:8082 --hostname-strict=true
 
 docker run --name feedback-db -p 27017:27017 mongo:8
 
@@ -12,6 +12,8 @@ docker run --name selmag-metrics -p 8428:8428 -v ./config/victoria-metrics/proms
 
 lsof -i tcp:3000
 kill -9 <PID>
+
+`--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
 ## SSR
 
@@ -140,17 +142,17 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 
 | Scope | Кто запрашивает | Кто проверяет | Зачем |
 |---|---|---|---|
-| `metrics` | `admin-service` (client_credentials) | `catalogue-service` и `feedback-service`, правило `/actuator/**` | админка читает метрики инстанса |
+| `metrics` | `admin-service` (client_credentials), `victoria-metrics` (client_credentials) | `catalogue-service` и `feedback-service`, правило `/actuator/**` | админка читает метрики инстанса |
 | `metrics_server` | `catalogue-service-metrics-client` / `feedback-service-metrics-client` (client_credentials) | `admin-server`, цепочка для запросов с `Authorization: Bearer` | инстанс сам регистрируется в админке |
 
 Легко перепутать: `SCOPE_metrics` — «мне можно читать метрики», `SCOPE_metrics_server` — «мне можно пользоваться сервером метрик (регистрироваться в нём)».
 
 ### Что придётся добавить в Keycloak вручную
 
-`config/keycloak/import/realm-export.json` уже содержит оба scope и клиентов `admin-service`, `catalogue-service-metrics-client`, `feedback-service-metrics-client`, но `--import-realm` применяет экспорт **только при первом создании realm**. Если контейнер `selmag-keycloak` уже существует, добавьте руками:
+`config/keycloak/import/realm-export.json` уже содержит оба scope и клиентов `admin-service`, `catalogue-service-metrics-client`, `feedback-service-metrics-client`, `victoria-metrics`, но `--import-realm` применяет экспорт **только при первом создании realm**. Если контейнер `selmag-keycloak` уже существует, добавьте руками:
 
 1. **Client scopes → Create client scope**: name `metrics_server`, protocol `openid-connect`, `Include in token scope` = on. Мапперы не нужны.
-2. **Clients → Create client**: `catalogue-service-metrics-client` и `feedback-service-metrics-client`, у обоих `Client authentication` = on (confidential), `Service accounts roles` = on, `Standard flow` = off. В `Client scopes` добавить `metrics_server` как **Optional**. Секреты скопировать в `catalogue-service/…/application-standalone.yaml` и `feedback-service/…/application-standalone.yml` (`spring.security.oauth2.client.registration.keycloak.client-secret`).
+2. **Clients → Create client**: `catalogue-service-metrics-client` и `feedback-service-metrics-client`, у обоих `Client authentication` = on (confidential), `Service accounts roles` = on, `Standard flow` = off. В `Client scopes` добавить `metrics_server` как **Optional**. Секреты скопировать в `catalogue-service/…/application-standalone.yaml` и `feedback-service/…/application-standalone.yml` (`spring.security.oauth2.client.registration.keycloak.client-secret`). Клиент `victoria-metrics` создаётся так же (`Service accounts roles` = on, `Standard flow` = off), но с `metrics` в **Optional**; его секрет — в `config/victoria-metrics/promscrape.yaml`.
 3. **Clients → `admin-service`**: `Standard flow` = on (вход в UI), `Service accounts roles` = on (`client_credentials`), `Root URL` = `http://localhost:8085`, `Valid redirect URIs` = `/*`, `Web origins` = `/*`. Проверить, что `metrics` есть в `Client scopes → Optional`.
 4. Убедиться, что оба scope включены в `optionalClientScopes` нужных клиентов — иначе Keycloak проигнорирует запрошенный scope, и в токене не будет ни `SCOPE_metrics`, ни `SCOPE_metrics_server` (получите `403`).
 
