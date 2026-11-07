@@ -10,12 +10,20 @@ docker exec -it feedback-db mongosh feedback
 
 docker run --name selmag-metrics -p 8428:8428 -v ./config/victoria-metrics/promscrape.yaml:/promscrape.yaml victoriametrics/victoria-metrics:v1.155.0 -promscrape.config=promscrape.yaml
 
+mkdir -p data/grafana
+
+docker run --name selmag-grafana -p 3000:3000 -v ./data/grafana:/var/lib/grafana -u "$(id -u)" grafana/grafana:13.3.0
+
 lsof -i tcp:3000
 kill -9 <PID>
 
 `--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
-**Зачем VictoriaMetrics.** Приложения не отправляют метрики сами — они лишь экспонируют текущий снимок на `/actuator/prometheus`, а `selmag-metrics` раз в ~15 с скрапит его (`config/victoria-metrics/promscrape.yaml`) и хранит сэмплы с таймстампами в своей TSDB. Поэтому история переживает падение и рестарт приложения (Spring Boot Admin показывает только «сейчас»), виден сам факт падения (`up{job="…"} == 0`, разрыв в скрапах) и значения до него, а все сервисы собираются в одном месте — по этой истории строятся дашборды и алерты. Посмотреть метрики — `http://localhost:8428/vmui/`; Grafana — отдельный слой визуализации поверх VM, для базового просмотра не обязательна.
+**Зачем VictoriaMetrics.** Приложения не отправляют метрики сами — они лишь экспонируют текущий снимок на `/actuator/prometheus`, а `selmag-metrics` раз в ~15 с скрапит его (`config/victoria-metrics/promscrape.yaml`) и хранит сэмплы с таймстампами в своей TSDB. Поэтому история переживает падение и рестарт приложения (Spring Boot Admin показывает только «сейчас»), виден сам факт падения (`up{job="…"} == 0`, разрыв в скрапах) и значения до него, а все сервисы собираются в одном месте — по этой истории строятся дашборды и алерты. Посмотреть метрики без дашбордов — `http://localhost:8428/vmui/`.
+
+**Зачем Grafana.** VictoriaMetrics хранит и отдаёт метрики, но её `vmui` — инструмент для ad-hoc запросов: постоянных дашбордов с панелями и переменными, алертов и общего доступа там нет. Grafana — отдельный слой визуализации поверх VM (и других источников): дашборды (в том числе как JSON в репозитории), панели и переменные, алерты, аутентификация и шаринг. Для базового просмотра метрик она не обязательна. Доступна по `http://localhost:3000/`, дефолтные креды `admin`/`admin` (при первом входе попросит сменить пароль). Чтобы подключить метрики: `http://localhost:3000/connections/datasources` → **Add new data source** → **Prometheus**, URL — `http://host.docker.internal:8428` (VM отдаёт Prometheus-совместимый API; `Access` оставить `Server` — запросы проксирует сам контейнер Grafana, браузеру `host.docker.internal` не нужен).
+
+**Папка `data/grafana`.** Мы создаём только пустой каталог (`mkdir -p data/grafana`); файлы в нём появляются при первом старте Grafana и дальше наполняются автоматически. `./data/grafana` смонтирован в `/var/lib/grafana` — это `[paths] data` Grafana: внутри `grafana.db` (SQLite: пользователи, дашборды, datasource'ы, настройки), каталог `plugins/`, а также временные `csv/`, `pdf/`, `png/` для экспорта и рендеринга. Bind mount нужен, чтобы дашборды и настройки переживали пересоздание контейнера: удалить `data/grafana` — значит сбросить Grafana к дефолту. Флаг `-u "$(id -u)"` — рекомендуемый официальной документацией приём для bind mount: контейнер пишет в `./data/grafana` от твоего UID, поэтому файлы не остаются root-owned.
 
 ## SSR
 

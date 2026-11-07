@@ -41,3 +41,6 @@ build/
 
 ### Playwright MCP ###
 .playwright-mcp/
+
+### Local Docker data (Grafana) ###
+/data/
