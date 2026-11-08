@@ -51,7 +51,7 @@ springdoc:
       use-pkce-with-authorization-code-grant: true
 keycloak:
   uri: http://localhost:8082
-management:
+management: # specify export metrics, which one should be exposed
   health:
     livenessstate: ## живое ли приложение
       enabled: true
@@ -60,4 +60,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: '*'
+        include: '*' # exposes /actuator/prometheus for VictoriaMetrics (and everything Spring Boot Admin needs)
