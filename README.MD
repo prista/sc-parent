@@ -27,7 +27,7 @@ kill -9 <PID>
 
 **Зачем Loki.** VictoriaMetrics хранит только метрики; логи приложений — это отдельный тип данных, и `selmag-loki` собирает и хранит их, чтобы в Grafana можно было рядом с графиками смотреть и искать логи сервисов. Чтобы подключить: `http://localhost:3000/connections/datasources` → **Add new data source** → **Loki**, URL — `http://host.docker.internal:3100` (`Access` оставить `Server` — запросы проксирует контейнер Grafana).
 
-**Откуда логи в Loki.** Сейчас логи в Loki шлёт только `admin-server`: его `admin-server/src/main/resources/logback.xml` содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level`. Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl admin-server spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. Панель с логами в дашборде JVM (Micrometer) выглядит так:
+**Откуда логи в Loki.** Сейчас логи в Loki шлют `admin-server` и `catalogue-service`: `src/main/resources/logback.xml` каждого из них содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level` (значение `app` своё у каждого сервиса — `selmag-admin-service` и `selmag-catalogue-service`). Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl catalogue-service spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. В Grafana логи конкретного сервиса выбираются селектором вида `{app="selmag-catalogue-service"}`. Панель с логами в дашборде JVM (Micrometer) выглядит так:
 
 ![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
 
