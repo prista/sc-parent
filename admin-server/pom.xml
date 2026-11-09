@@ -46,6 +46,17 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
+        <!-- to ship logs to Grafana Loki (loki-logback-appender 2.x requires Logback 1.5.x, as in Boot 4.0) -->
+        <dependency>
+            <groupId>com.github.loki4j</groupId>
+            <artifactId>loki-logback-appender</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+        <!-- enables <if condition="..."> in logback config (evaluated by Janino) -->
+        <dependency>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>janino</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
