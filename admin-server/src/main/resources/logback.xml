@@ -1,7 +1,38 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<included>
+<?xml version="1.0" encoding="UTF-8" ?>
+<configuration>
 
-    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
 
-</included>
+    <condition class="ch.qos.logback.core.boolex.IsPropertyDefinedCondition">
+        <key>LOKI</key>
+    </condition>
+    <if>
+        <then>
+            <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+                <http>
+                    <url>${LOKI}/loki/api/v1/push</url>
+                </http>
+                <labels>
+                    app = selmag-admin-service
+                    host = ${HOSTNAME}
+                    level = %level
+                </labels>
+                <message>
+                    <pattern>l=%level h=${HOSTNAME} c=%logger{20} t=%thread | %msg %ex</pattern>
+                </message>
+            </appender>
+
+            <root level="info">
+                <appender-ref ref="CONSOLE"/>
+                <appender-ref ref="LOKI"/>
+            </root>
+        </then>
+        <else>
+            <root level="info">
+                <appender-ref ref="CONSOLE"/>
+            </root>
+        </else>
+    </if>
+
+</configuration>

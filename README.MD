@@ -27,6 +27,12 @@ kill -9 <PID>
 
 **Зачем Loki.** VictoriaMetrics хранит только метрики; логи приложений — это отдельный тип данных, и `selmag-loki` собирает и хранит их, чтобы в Grafana можно было рядом с графиками смотреть и искать логи сервисов. Чтобы подключить: `http://localhost:3000/connections/datasources` → **Add new data source** → **Loki**, URL — `http://host.docker.internal:3100` (`Access` оставить `Server` — запросы проксирует контейнер Grafana).
 
+**Откуда логи в Loki.** Сейчас логи в Loki шлёт только `admin-server`: его `admin-server/src/main/resources/logback.xml` содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level`. Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl admin-server spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. Панель с логами в дашборде JVM (Micrometer) выглядит так:
+
+![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
+
+**Зачем `condition` в `logback.xml`.** `<condition class="ch.qos.logback.core.boolex.IsPropertyDefinedCondition"><key>LOKI</key></condition>` перед `<if>` — это условная конфигурация logback (появилась в 1.5.20, Janino для неё не нужна): аппендер `LOKI` создаётся только если свойство `LOKI` определено (ищется в env-переменных, `-D` и системных свойствах). Нужно это для интеграционных тестов (и CI), где Loki не запущен: без аппендера приложение не пытается подключиться к `http://localhost:3100`, не сыплет ошибками отправки в лог тестов и стартует с одним `CONSOLE`-аппендером.
+
 **Папка `data/grafana`.** Мы создаём только пустой каталог (`mkdir -p data/grafana`); файлы в нём появляются при первом старте Grafana и дальше наполняются автоматически. `./data/grafana` смонтирован в `/var/lib/grafana` — это `[paths] data` Grafana: внутри `grafana.db` (SQLite: пользователи, дашборды, datasource'ы, настройки), каталог `plugins/`, а также временные `csv/`, `pdf/`, `png/` для экспорта и рендеринга. Bind mount нужен, чтобы дашборды и настройки переживали пересоздание контейнера: удалить `data/grafana` — значит сбросить Grafana к дефолту. Флаг `-u "$(id -u)"` — рекомендуемый официальной документацией приём для bind mount: контейнер пишет в `./data/grafana` от твоего UID, поэтому файлы не остаются root-owned.
 
 ## SSR
