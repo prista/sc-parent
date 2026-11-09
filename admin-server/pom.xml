@@ -52,12 +52,6 @@
             <artifactId>loki-logback-appender</artifactId>
             <version>2.0.3</version>
         </dependency>
-        <!-- enables <if condition="..."> in logback config (evaluated by Janino) -->
-        <dependency>
-            <groupId>org.codehaus.janino</groupId>
-            <artifactId>janino</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
