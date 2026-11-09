@@ -14,6 +14,8 @@ mkdir -p data/grafana
 
 docker run --name selmag-grafana -p 3000:3000 -v ./data/grafana:/var/lib/grafana -u "$(id -u)" grafana/grafana:13.3.0
 
+docker run --name selmag-loki -p 3100:3100 grafana/loki:3.6.20
+
 lsof -i tcp:3000
 kill -9 <PID>
 
@@ -22,6 +24,14 @@ kill -9 <PID>
 **Зачем VictoriaMetrics.** Приложения не отправляют метрики сами — они лишь экспонируют текущий снимок на `/actuator/prometheus`, а `selmag-metrics` раз в ~15 с скрапит его (`config/victoria-metrics/promscrape.yaml`) и хранит сэмплы с таймстампами в своей TSDB. Поэтому история переживает падение и рестарт приложения (Spring Boot Admin показывает только «сейчас»), виден сам факт падения (`up{job="…"} == 0`, разрыв в скрапах) и значения до него, а все сервисы собираются в одном месте — по этой истории строятся дашборды и алерты. Посмотреть метрики без дашбордов — `http://localhost:8428/vmui/`.
 
 **Зачем Grafana.** VictoriaMetrics хранит и отдаёт метрики, но её `vmui` — инструмент для ad-hoc запросов: постоянных дашбордов с панелями и переменными, алертов и общего доступа там нет. Grafana — отдельный слой визуализации поверх VM (и других источников): дашборды (в том числе как JSON в репозитории), панели и переменные, алерты, аутентификация и шаринг. Для базового просмотра метрик она не обязательна. Доступна по `http://localhost:3000/`, дефолтные креды `admin`/`admin` (при первом входе попросит сменить пароль). Чтобы подключить метрики: `http://localhost:3000/connections/datasources` → **Add new data source** → **Prometheus**, URL — `http://host.docker.internal:8428` (VM отдаёт Prometheus-совместимый API; `Access` оставить `Server` — запросы проксирует сам контейнер Grafana, браузеру `host.docker.internal` не нужен).
+
+**Зачем Loki.** VictoriaMetrics хранит только метрики; логи приложений — это отдельный тип данных, и `selmag-loki` собирает и хранит их, чтобы в Grafana можно было рядом с графиками смотреть и искать логи сервисов. Чтобы подключить: `http://localhost:3000/connections/datasources` → **Add new data source** → **Loki**, URL — `http://host.docker.internal:3100` (`Access` оставить `Server` — запросы проксирует контейнер Grafana).
+
+**Откуда логи в Loki.** Сейчас логи в Loki шлёт только `admin-server`: его `admin-server/src/main/resources/logback.xml` содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level`. Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl admin-server spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. Панель с логами в дашборде JVM (Micrometer) выглядит так:
+
+![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
+
+**Зачем `condition` в `logback.xml`.** `<condition class="ch.qos.logback.core.boolex.IsPropertyDefinedCondition"><key>LOKI</key></condition>` перед `<if>` — это условная конфигурация logback (появилась в 1.5.20, Janino для неё не нужна): аппендер `LOKI` создаётся только если свойство `LOKI` определено (ищется в env-переменных, `-D` и системных свойствах). Нужно это для интеграционных тестов (и CI), где Loki не запущен: без аппендера приложение не пытается подключиться к `http://localhost:3100`, не сыплет ошибками отправки в лог тестов и стартует с одним `CONSOLE`-аппендером.
 
 **Папка `data/grafana`.** Мы создаём только пустой каталог (`mkdir -p data/grafana`); файлы в нём появляются при первом старте Grafana и дальше наполняются автоматически. `./data/grafana` смонтирован в `/var/lib/grafana` — это `[paths] data` Grafana: внутри `grafana.db` (SQLite: пользователи, дашборды, datasource'ы, настройки), каталог `plugins/`, а также временные `csv/`, `pdf/`, `png/` для экспорта и рендеринга. Bind mount нужен, чтобы дашборды и настройки переживали пересоздание контейнера: удалить `data/grafana` — значит сбросить Grafana к дефолту. Флаг `-u "$(id -u)"` — рекомендуемый официальной документацией приём для bind mount: контейнер пишет в `./data/grafana` от твоего UID, поэтому файлы не остаются root-owned.
 
