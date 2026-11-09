@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.server.ServerOAuth2AuthorizedClientRepository;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import static org.mockito.Mockito.mock;
@@ -22,6 +23,13 @@ public class TestConfig {
 
     @Bean
     public ServerOAuth2AuthorizedClientRepository authorizedClientRepository() {
+        return mock();
+    }
+
+    // The actuator security chain needs a decoder bean; tests do not activate the
+    // "standalone" profile, so no issuer-uri is configured to build a real one.
+    @Bean
+    public ReactiveJwtDecoder reactiveJwtDecoder() {
         return mock();
     }
 

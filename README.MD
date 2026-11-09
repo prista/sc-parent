@@ -27,7 +27,7 @@ kill -9 <PID>
 
 **Зачем Loki.** VictoriaMetrics хранит только метрики; логи приложений — это отдельный тип данных, и `selmag-loki` собирает и хранит их, чтобы в Grafana можно было рядом с графиками смотреть и искать логи сервисов. Чтобы подключить: `http://localhost:3000/connections/datasources` → **Add new data source** → **Loki**, URL — `http://host.docker.internal:3100` (`Access` оставить `Server` — запросы проксирует контейнер Grafana).
 
-**Откуда логи в Loki.** Сейчас логи в Loki шлют `admin-server` и `catalogue-service`: `src/main/resources/logback.xml` каждого из них содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level` (значение `app` своё у каждого сервиса — `selmag-admin-service` и `selmag-catalogue-service`). Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl catalogue-service spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. В Grafana логи конкретного сервиса выбираются селектором вида `{app="selmag-catalogue-service"}`. Панель с логами в дашборде JVM (Micrometer) выглядит так:
+**Откуда логи в Loki.** Сейчас логи в Loki шлют `admin-server`, `catalogue-service` и `customer-app`: `src/main/resources/logback.xml` каждого из них содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level` (значение `app` своё у каждого сервиса — `selmag-admin-service`, `selmag-catalogue-service`, `selmag-customer-app`). Включается это переменной окружения `LOKI` (например, `LOKI=http://localhost:3100 ./mvnw -pl customer-app spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. В Grafana логи конкретного сервиса выбираются селектором вида `{app="selmag-customer-app"}`. Панель с логами в дашборде JVM (Micrometer) выглядит так:
 
 ![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
 
@@ -130,6 +130,8 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 | Входящие запросы | валидирует JWT | session-based (`OidcUser`) |
 | Авторизация | по `SCOPE_*` | по роли `ROLE_MANAGER` |
 | Исходящие вызовы | — | interceptor → Bearer-токен юзера |
+
+**`customer-app` — OAuth2 client и resource server для `/actuator/**`.** Для UI всё как раньше: `anyExchange().authenticated()` + `oauth2Login`, CSRF включён (POST-формы Thymeleaf). Отдельная цепочка фильтров (`@Order(0)`, `securityMatcher("/actuator/**")`) валидирует Bearer JWT и требует `SCOPE_metrics` — по этому токену (`victoria-metrics`, `client_credentials`, scope `metrics`) VictoriaMetrics скрапит `/actuator/prometheus`. Spring Boot Admin-клиента у `customer-app` нет. Тесты этой цепочки — `ActuatorSecurityIT` (без токена → 401, без scope → 403, со `SCOPE_metrics` → 200).
 
 ### Покрытие тестами
 

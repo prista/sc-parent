@@ -7,6 +7,9 @@ server:
 spring:
   security:
     oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
       client:
         provider:
           keycloak:
@@ -22,3 +25,13 @@ spring:
             scope:
               - openid
               - view_catalogue
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
