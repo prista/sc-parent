@@ -47,6 +47,12 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
+        <!-- to ship logs to Grafana Loki (loki-logback-appender 2.x requires Logback 1.5.x, as in Boot 4.0) -->
+        <dependency>
+            <groupId>com.github.loki4j</groupId>
+            <artifactId>loki-logback-appender</artifactId>
+            <version>2.0.3</version>
+        </dependency>
 
         <!-- 1. Spring Data JPA for working with database data -->
         <dependency>
