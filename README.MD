@@ -16,6 +16,8 @@ docker run --name selmag-grafana -p 3000:3000 -v ./data/grafana:/var/lib/grafana
 
 docker run --name selmag-loki -p 3100:3100 grafana/loki:3.6.20
 
+docker run --name selmag-tempo -p 3200:3200 -p 4317:4317 -p 4318:4318 -v ./config/tempo/tempo.yaml:/etc/tempo.yaml grafana/tempo:3.1.1 -config.file=/etc/tempo.yaml
+
 lsof -i tcp:3000
 kill -9 <PID>
 
@@ -46,6 +48,12 @@ SPRING_PROFILES_ACTIVE=standalone LOKI=http://127.0.0.1:3100 \
 **Откуда логи в Loki.** Сейчас логи в Loki шлют все пять сервисов: `admin-server`, `catalogue-service`, `customer-app`, `feedback-service` и `manager-app`. `src/main/resources/logback.xml` каждого из них содержит `Loki4jAppender`, который отправляет записи в `${LOKI}/loki/api/v1/push` с метками `app`, `host`, `level` (значение `app` своё у каждого сервиса — `selmag-admin-service`, `selmag-catalogue-service`, `selmag-customer-app`, `selmag-feedback-service`, `selmag-manager-app`). Включается это переменной окружения `LOKI` (например, `SPRING_PROFILES_ACTIVE=standalone LOKI=http://127.0.0.1:3100 ./mvnw -pl manager-app spring-boot:run`); без неё приложение пишет логи как обычно — только в консоль. В Grafana логи конкретного сервиса выбираются селектором вида `{app="selmag-manager-app"}`. Учтите, что loki4j буферизует записи: по умолчанию батч отправляется раз в 60 секунд (или при заполнении 1000 записей), поэтому в Loki логи появляются не мгновенно. Панель с логами в дашборде JVM (Micrometer) выглядит так:
 
 ![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
+
+**Зачем Tempo.** VictoriaMetrics хранит метрики, Loki — логи, а распределённые трейсы — Grafana Tempo. `customer-app` отправляет OTLP-спаны по HTTP на `http://localhost:4318/v1/traces` (`management.opentelemetry.tracing.export.otlp.endpoint` в `application-standalone.yml`), Tempo принимает их на порту `4318` и отдаёт Grafana по `3200`. Экспорт идёт напрямую в Tempo, без OTel Collector. Если Tempo не запущен, приложение продолжает работать, но пишет в лог ошибки экспорта и теряет трейсы. Сэмплирование выставлено в `1.0` (100%) только для локальной демонстрации — по умолчанию Spring Boot сэмплирует 10%; для реального окружения верните `0.1`. Хранилище в контейнере без volume, поэтому после его пересоздания трейсы пропадают.
+
+Чтобы подключить трейсы в Grafana: `http://localhost:3000/connections/datasources` → **Add new data source** → **Tempo**, URL — `http://host.docker.internal:3200` (`Access` оставить `Server`; на Linux вместо `host.docker.internal` нужен адрес хоста, например `172.17.0.1`). Затем **Explore** → **Tempo** → **Search**: Service Name — `selmag-customer-app`, Span Name — например `http get /customer/products/{productId}` (или TraceQL `{name="http get /customer/products/{productId}"}`). В открывшемся трейсе видны корневой HTTP-спан и вложенные спаны Spring Security: `security filterchain before`, `authorize exchange`, `secured request`, `security filterchain after`.
+
+Быстрая проверка, что экспорт работает, не требует входа в storefront: VictoriaMetrics скрапит `/actuator/prometheus` примерно каждые 15 секунд, поэтому в Tempo появятся трейсы с корневым спаном `http get /actuator/prometheus`. Это шум для демонстрации — нужный трейс ищите по имени спана. Чтобы увидеть трейс страницы товара, запустите с профилем `standalone` Keycloak, `catalogue-service`, `feedback-service` и `customer-app`, войдите как `j.daniels` / `password` и откройте `http://localhost:8083/customer/products/1`. Трейсы появляются не мгновенно: экспортёр отправляет батчи раз в 5 секунд, а Tempo индексирует их для поиска ещё с задержкой до минуты.
 
 **Зачем `condition` в `logback.xml`.** `<condition class="ch.qos.logback.core.boolex.IsPropertyDefinedCondition"><key>LOKI</key></condition>` перед `<if>` — это условная конфигурация logback (появилась в 1.5.20, Janino для неё не нужна): аппендер `LOKI` создаётся только если свойство `LOKI` определено (ищется в env-переменных, `-D` и системных свойствах). Нужно это для интеграционных тестов (и CI), где Loki не запущен: без аппендера приложение не пытается подключиться к `http://127.0.0.1:3100`, не сыплет ошибками отправки в лог тестов и стартует с одним `CONSOLE`-аппендером.
 
