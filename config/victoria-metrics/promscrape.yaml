@@ -59,17 +59,17 @@ scrape_configs: # тут перечисляем array источников ме�
         - metrics
       endpoint_params:
         grant_type: client_credentials
-#  - job_name: selmag_manager_app
-#    static_configs:
-#      - targets: ["http://host.docker.internal:8080"]
-#        labels:
-#          application: selmag-manager-app
-#    metrics_path: /actuator/prometheus
-#    oauth2:
-#      client_id: victoria-metrics
-#      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
-#      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
-#      scopes:
-#        - metrics
-#      endpoint_params:
-#        grant_type: client_credentials
+  - job_name: selmag_manager_app
+    static_configs:
+      - targets: ["http://host.docker.internal:8080"]
+        labels:
+          application: selmag-manager-app
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://host.docker.internal:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials

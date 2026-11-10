@@ -10,6 +10,9 @@ spring:
     password: manager
   security:
     oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
       client:
         provider:
           keycloak:
@@ -24,3 +27,13 @@ spring:
               - view_catalogue
               - edit_catalogue
               - microprofile-jwt
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'

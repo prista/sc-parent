@@ -117,12 +117,14 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 - Swagger UI/docs (`/swagger-ui/**`, `/v3/api-docs/**`, …) → `permitAll()`;
 - всё остальное → `denyAll`.
 
-**`manager-app` — OAuth2 client в двух ролях одновременно** (но **не** resource server):
+**`manager-app` — OAuth2 client в двух ролях одновременно** (и resource server только для `/actuator/**`):
 
 1. **Логин пользователей** — `oauth2Login`: юзер логинится через Keycloak (authorization code flow), `manager-app` получает ID token + access token и хранит в сессии. Входящие запросы — session-based (в `SecurityContext` лежит `OidcUser`), JWT на входе не валидируется.
 2. **Исходящие вызовы** — `oauth2Client` + `OAuthClientHttpRequestInterceptor`: берёт из сессии access token юзера и шлёт в `catalogue-service` как `Authorization: Bearer …` (token relay).
 
 Роли: кастомный `oAuth2UserService` читает `groups`-claim из ID token, оставляет только `ROLE_`-записи и маппит их в `SimpleGrantedAuthority`, поэтому работает правило `.anyRequest().hasRole("MANAGER")` — все UI-маршруты требуют `ROLE_MANAGER`.
+
+Отдельная цепочка фильтров (`@Order(0)`, `securityMatcher("/actuator/**")`) делает `manager-app` resource server только для актуатора: она валидирует Bearer JWT и требует `SCOPE_metrics`, по этому токену (`victoria-metrics`, `client_credentials`) VictoriaMetrics скрапит `/actuator/prometheus`. UI-цепочка (`@Order(1)`) при этом не меняется. Тест — `ActuatorSecurityIT` (401 без токена, 403 без scope, 200 со `SCOPE_metrics`).
 
 | | `catalogue-service` | `manager-app` |
 |---|---|---|
