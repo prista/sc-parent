@@ -66,7 +66,7 @@ There is no anonymous API surface left: `catalogue-service` requires `SCOPE_view
 - **Database:** PostgreSQL (two separate databases, managed by Flyway for migrations) for `catalogue-service` and `manager-app`; MongoDB (reactive, schema-less) for `feedback-service`.
 - **Templating (Frontend):** Thymeleaf
 - **Security:** Spring Security — OAuth2 resource server (JWT) in `catalogue-service` (servlet: `HttpSecurity`/`SecurityFilterChain`), `feedback-service` (reactive: `ServerHttpSecurity`/`SecurityWebFilterChain`) and `admin-server` (servlet; resource server only for Bearer requests, `oauth2Login` for the UI, `client_credentials` for actuator polling); `customer-app` is a resource server only on its `@Order(0)` `/actuator/**` chain (`SCOPE_metrics`), while its UI stays OAuth2 login + client (token relay); `manager-app` likewise adds an `@Order(0)` `/actuator/**` resource-server chain (`SCOPE_metrics`) on top of its OAuth2 login + client UI; OAuth2 login + client (token relay) in `manager-app` (servlet) and `customer-app` (reactive); Keycloak as IdP
-- **Monitoring:** Spring Boot Admin 4.0.4 — server (`admin-server`) + clients (`catalogue-service`, `feedback-service`); Grafana Tempo 3.1.1 for traces (`selmag-tempo` container, OTLP on `4317`/`4318`, query API on `3200`, config `config/tempo/tempo.yaml`)
+- **Monitoring:** Spring Boot Admin 4.0.4 — server (`admin-server`) + clients (`catalogue-service`, `feedback-service`); Grafana Tempo 3.1.1 for traces (`selmag-tempo` container, OTLP on `4317`/`4318`, query API on `3200`, config `config/tempo/tempo.yaml`); local how-to for metrics/logs/traces (VictoriaMetrics, Loki, Tempo, Grafana datasources, JVM dashboard) — `MONITORING.md`
 
 ### Key Dependencies
 
