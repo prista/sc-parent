@@ -1,4 +1,6 @@
 spring:
+  application:
+    name: selmag-catalogue-service # becomes service.name in Tempo; matches the Loki label
   security:
     oauth2:
       resourceserver:
@@ -52,6 +54,21 @@ springdoc:
 keycloak:
   uri: http://localhost:8082
 management: # specify export metrics, which one should be exposed
+  tracing:
+    sampling:
+      probability: 1.0 # local demo: 100%; production should use 0.1
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Boot 4 has no default endpoint: without this property no exporter is created.
+          # The /v1/traces path is required for transport http.
+          endpoint: http://localhost:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
     livenessstate: ## живое ли приложение
       enabled: true

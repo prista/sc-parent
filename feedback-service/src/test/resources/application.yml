@@ -1,0 +1,8 @@
+management:
+  tracing:
+    export:
+      enabled: false # tests must not try to export spans to a missing Tempo
+  otlp:
+    metrics:
+      export:
+        enabled: false # no OTLP metrics in tests

@@ -3,3 +3,12 @@ spring:
     url: jdbc:tc:postgresql:17.4-alpine:///selmag?TC_DAEMON=true
     username: selmag
     password: selmag
+
+management:
+  tracing:
+    export:
+      enabled: false # tests must not try to export spans to a missing Tempo
+  otlp:
+    metrics:
+      export:
+        enabled: false # no OTLP metrics in tests

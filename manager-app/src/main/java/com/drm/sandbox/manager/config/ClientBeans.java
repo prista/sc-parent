@@ -17,10 +17,13 @@ public class ClientBeans {
     @Bean
     public RestClientProductsRestClient productsRestClient(
             @Value("${selmag.services.catalogue.uri:http://localhost:8081}") String catalogueBaseUri,
+            // Auto-configured prototype builder: carries observations (client spans, client metrics,
+            // traceparent propagation). A bare RestClient.builder() would lose all of that.
+            RestClient.Builder restClientBuilder,
             ClientRegistrationRepository clientRegistrationRepository,
             OAuth2AuthorizedClientRepository authorizedClientRepository,
             @Value("${selmag.services.catalogue.registration-id:keycloak}") String registrationId) {
-        return new RestClientProductsRestClient(RestClient.builder()
+        return new RestClientProductsRestClient(restClientBuilder
                 .baseUrl(catalogueBaseUri)
                 .requestInterceptor(
                         new OAuthClientHttpRequestInterceptor(

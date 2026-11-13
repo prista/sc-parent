@@ -8,3 +8,12 @@ spring:
     url: jdbc:tc:postgresql:17.4-alpine:///manager?TC_DAEMON=true
     username: manager
     password: manager
+
+management:
+  tracing:
+    export:
+      enabled: false # tests must not try to export spans to a missing Tempo
+  otlp:
+    metrics:
+      export:
+        enabled: false # no OTLP metrics in tests

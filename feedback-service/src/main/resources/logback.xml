@@ -19,7 +19,7 @@
                     level = %level
                 </labels>
                 <message>
-                    <pattern>l=%level h=${HOSTNAME} c=%logger{20} t=%thread | %msg %ex</pattern>
+                    <pattern>%correlationId l=%level h=${HOSTNAME} c=%logger{20} t=%thread | %msg %ex</pattern>
                 </message>
             </appender>
 

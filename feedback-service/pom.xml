@@ -42,6 +42,11 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
+        <!-- OTLP tracing to Tempo; OTLP metrics export is disabled in application-standalone.yml -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+        </dependency>
         <!-- to ship logs to Grafana Loki (loki-logback-appender 2.x requires Logback 1.5.x, as in Boot 4.0) -->
         <dependency>
             <groupId>com.github.loki4j</groupId>

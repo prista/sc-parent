@@ -11,7 +11,7 @@
    │
    ├── push логов (если задан LOKI)  ──────────────────►  Loki :3100             ──►  Grafana :3000
    │
-   └── OTLP/HTTP (пока только customer-app)  ──────────►  Tempo :3200 (4317/4318) ──►  Grafana :3000
+   └── OTLP/HTTP (все бизнес-сервисы, кроме admin-server) ──►  Tempo :3200 (4317/4318) ──►  Grafana :3000
 ```
 
 Метрики VictoriaMetrics **забирает сама** (pull). Логи и трейсы приложения **отправляют сами** (push). Grafana — единая точка просмотра: она ходит в datasource'ы со своей стороны, поэтому браузеру не нужны внутренние адреса контейнеров.
@@ -115,6 +115,8 @@ Appender шлёт метки `app`, `host`, `level`; `service_name` и `detected
 
 `selmag-admin-service`, `selmag-catalogue-service`, `selmag-customer-app`, `selmag-feedback-service`, `selmag-manager-app`.
 
+При включённом трейсинге строки логов начинаются с `[traceId-spanId]`: в консоли это делает Boot-паттерн (`%correlationId`, включается автоматически при наличии Micrometer Tracing), а в сообщение для Loki его добавляет pattern `Loki4jAppender`. По trace ID можно перейти из строки лога в соответствующий трейс Tempo.
+
 Где смотреть: Grafana → **Explore** → datasource `loki`:
 
 ```logql
@@ -127,20 +129,40 @@ Loki буферизует записи: батч уходит раз в 60 се�
 
 ## Трейсы
 
-Трейсы пока отправляет только `customer-app`: `spring-boot-starter-opentelemetry` шлёт спаны по OTLP/HTTP на `http://localhost:4318/v1/traces`. В Tempo сервис называется `selmag-customer-app` (`spring.application.name`), сэмплирование локально — `1.0` (100%).
+Трейсы отправляют все четыре бизнес-сервиса: `spring-boot-starter-opentelemetry` шлёт спаны по OTLP/HTTP на `http://localhost:4318/v1/traces`. `admin-server` намеренно не инструментирован — его единственный трафик (опрос актуаторов Spring Boot Admin) дал бы только шум. В Tempo сервисы называются по `spring.application.name`:
+
+| Сервис | `service.name` |
+|---|---|
+| `customer-app` | `selmag-customer-app` |
+| `manager-app` | `selmag-manager-app` |
+| `catalogue-service` | `selmag-catalogue-service` |
+| `feedback-service` | `selmag-feedback-service` |
+
+Сэмплирование локально — `1.0` (100%), экспорт OTLP-метрик отключён (метрики остаются в Prometheus/VictoriaMetrics).
+
+### Как это работает
+
+- `spring-boot-starter-opentelemetry` приносит Micrometer Tracing, OTel SDK и OTLP-экспортёр — отдельные `micrometer-tracing*` зависимости не нужны.
+- Spring Boot сам инструментирует **входящие** запросы (серверные observations в Spring MVC/WebFlux) и **исходящие** — но только у клиентов, собранных из авто-конфигурированных `RestClient.Builder` / `WebClient.Builder`. Статические `RestClient.builder()` / `WebClient.builder()` обходят инструментирование, поэтому `manager-app` и `customer-app` инжектят builder из контекста.
+- На каждый запрос создаётся спан; контекст передаётся по HTTP в заголовке W3C `traceparent`. Получатель продолжает тот же трейс, поэтому в Tempo спаны связаны общим trace ID и `parentSpanId`.
+- `spring.application.name` становится ресурсным атрибутом `service.name` — по нему сервис находится в поиске Tempo (без него было бы `unknown_service`).
+- Спаны Spring Security (`security filterchain before/after`, `authorize exchange`, `secured request`) появляются автоматически: Spring Security 7 публикует observations, когда в контексте есть `ObservationRegistry`.
+- Экспортёр батчит спаны и отправляет их на `management.opentelemetry.tracing.export.otlp.endpoint`; Tempo индексирует их асинхронно — отсюда задержка поиска. Сэмплер (`management.tracing.sampling.probability`) решает, какие трейсы записывать.
+- В логи `traceId`/`spanId` попадают из MDC: Boot печатает их через `%correlationId` в консольном паттерне, а Loki-аппендер — через тот же conversion word в своём `<message><pattern>`.
 
 Где смотреть: Grafana → **Explore** → datasource `tempo` → **Search**:
 
-- Service Name — `selmag-customer-app`;
-- Span Name — например, `http get /customer/products/{productId}`;
-- либо TraceQL: `{resource.service.name="selmag-customer-app"}`, `{name="http get /actuator/prometheus"}`.
+- Service Name — любой из четырёх;
+- Span Name — например, `http get /customer/products/{productId}` или `http get /catalogue/products/list`;
+- либо TraceQL: `{resource.service.name="selmag-manager-app"}`, `{name="http get /actuator/prometheus"}`.
 
-В трейсе видны HTTP-спан и вложенные спаны Spring Security: `security filterchain before`, `authorize exchange`, `secured request`, `security filterchain after`.
+Сквозной трейс выглядит так: серверный спан `manager-app` / `customer-app` → клиентский спан `http get` на исходящий вызов → вложенный серверный спан `catalogue-service` / `feedback-service` с тем же trace ID и `parentSpanId`, равным ID клиентского спана. Внутри серверного спана видны вложенные спаны Spring Security (`security filterchain before`, `authorize exchange`, `secured request`, `security filterchain after`) и спаны приложения.
 
 Особенности:
 
 - Tempo индексирует трейсы с задержкой до минуты — не пугайтесь пустому поиску сразу после запроса;
-- VictoriaMetrics каждую минуту скрапит `/actuator/prometheus`, поэтому в Tempo много трейсов вида `http get /actuator/prometheus` — это нормальный шум, фильтруйте по имени спана;
+- VictoriaMetrics каждую минуту скрапит `/actuator/prometheus` всех четырёх сервисов, поэтому в Tempo много трейсов вида `http get /actuator/prometheus` — это нормальный шум, фильтруйте по имени спана;
+- регистрация в Spring Boot Admin тоже создаёт клиентские спаны (`catalogue-service` / `feedback-service` → `admin-server`); серверного спана у них нет, потому что `admin-server` не инструментирован — это ожидаемо;
 - данные Tempo без volume теряются при пересоздании контейнера.
 
 ## Дашборд JVM (Micrometer) и панель логов из Loki
@@ -200,7 +222,7 @@ curl -s http://127.0.0.1:3000/api/health
 | target `down` в VictoriaMetrics | приложение не запущено, Keycloak недоступен или нет scope `metrics` | открыть `/targets`, проверить приложение и токен |
 | `/actuator/prometheus` отдаёт 401 в браузере | эндпоинт защищён | это нормально; VictoriaMetrics ходит со своим токеном |
 | В Loki нет логов | не задан `LOKI` или не прошёл батч | проверить env, подождать до минуты |
-| В Tempo нет трейсов | Tempo не запущен или сервис не `customer-app` | `curl :3200/ready`, смотреть Service Name |
+| В Tempo нет трейсов | Tempo не запущен или сервис не входит в список трассируемых | `curl :3200/ready`, смотреть Service Name |
 | Пустой JVM-дашборд | не выбран datasource или ещё не было скрапа | выбрать `VictoriaMetrics`, подождать 60 с |
 
 ## Kubernetes: что изменится (на будущее)
