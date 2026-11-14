@@ -158,6 +158,20 @@ Loki буферизует записи: батч уходит раз в 60 се�
 
 Сквозной трейс выглядит так: серверный спан `manager-app` / `customer-app` → клиентский спан `http get` на исходящий вызов → вложенный серверный спан `catalogue-service` / `feedback-service` с тем же trace ID и `parentSpanId`, равным ID клиентского спана. Внутри серверного спана видны вложенные спаны Spring Security (`security filterchain before`, `authorize exchange`, `secured request`, `security filterchain after`) и спаны приложения.
 
+### Спаны БД (PostgreSQL и MongoDB)
+
+Обращения к базам тоже попадают в трейс:
+
+| Сервис | База | Как включено | Спаны |
+|---|---|---|---|
+| `catalogue-service` | PostgreSQL | зависимость `net.ttddyy.observation:datasource-micrometer-spring-boot` в `pom.xml`; авто-конфигурируется, настроек не требует | `connection`, `query`, `result-set` с атрибутами `jdbc.*` |
+| `feedback-service` | MongoDB | `config/MongoConfig` регистрирует `ContextProviderFactory` и `MongoObservationCommandListener` — Spring Boot 4 сам этого не делает | `<collection>.<operation>`, например `productReview.find`, с атрибутами `db.*` и `peer.service=mongo` |
+| `manager-app` | PostgreSQL | пока не инструментирован | — |
+
+У спана `query` текст SQL пишется в атрибут `jdbc.query[0]` (bind-параметры по умолчанию **не** пишутся), у `result-set` — число строк в `jdbc.row-count`. Для метрик high-cardinality атрибуты (SQL, число строк) отбрасываются, поэтому кардинальность Prometheus не растёт. Если спанов слишком много, набор можно сузить через `jdbc.includes=QUERY` (по умолчанию включены `CONNECTION`, `QUERY`, `FETCH`, `KEYS`).
+
+Служебные Mongo-команды (`ping`, `hello`, `isMaster`, `buildInfo`) отфильтрованы предикатом `mongoServiceCommandsPredicate`: без него каждый health-check и открытие соединения создают лишние спаны, в том числе корневые трейсы `hello`. Бизнес-команды (`find`, `insert`, …) остаются в трейсах.
+
 Особенности:
 
 - Tempo индексирует трейсы с задержкой до минуты — не пугайтесь пустому поиску сразу после запроса;
