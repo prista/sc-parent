@@ -1,11 +1,3 @@
-# Cloud profile — self-contained configuration (run with SPRING_PROFILES_ACTIVE=cloud).
-# This is a full copy of application-standalone.yaml; it is NOT layered on top of it.
-# Differences from standalone:
-#   * selmag.services.catalogue.uri points at the service-id instead of localhost:8081;
-#     the load balancer resolves it through Eureka. The canonical form is
-#     http://<service-id> (the lb: scheme is not used).
-#   * server.port is set explicitly (standalone relies on the 8080 default).
-#   * eureka.* block: registers in eureka-server and fetches the registry from it.
 selmag:
   services:
     catalogue:
@@ -13,7 +5,7 @@ selmag:
       registration-id: keycloak
 spring:
   application:
-    name: selmag-manager-app # becomes service.name in Tempo and the Eureka application id
+    name: selmag-manager-app
   datasource:
     url: jdbc:postgresql://localhost:5433/manager
     username: manager
@@ -42,13 +34,11 @@ server:
 management:
   tracing:
     sampling:
-      probability: 1.0 # local demo: 100%; production should use 0.1
+      probability: 0.1
   opentelemetry:
     tracing:
       export:
         otlp:
-          # Boot 4 has no default endpoint: without this property no exporter is created.
-          # The /v1/traces path is required for transport http.
           endpoint: http://localhost:4318/v1/traces
           transport: http
   otlp:
@@ -67,9 +57,9 @@ management:
 eureka:
   instance:
     prefer-ip-address: true
-    lease-renewal-interval-in-seconds: 5       # local development; in prod — 30
-    lease-expiration-duration-in-seconds: 10   # local development; in prod — 90
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
-    registry-fetch-interval-seconds: 5         # local development; in prod — 30
+    registry-fetch-interval-seconds: 5

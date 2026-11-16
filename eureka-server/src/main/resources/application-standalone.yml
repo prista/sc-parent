@@ -15,8 +15,6 @@ eureka:
     register-with-eureka: false
     fetch-registry: false
     service-url:
-      # Key is case-sensitive: defaultZone, not default-zone. Kept even with
-      # register-with-eureka/fetch-registry off — this is the official standalone example.
       defaultZone: http://localhost:8761/eureka/
   server:
     enable-self-preservation: false      # one local node: dead instances must disappear

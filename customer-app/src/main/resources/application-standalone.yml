@@ -6,7 +6,7 @@ server:
   port: 8083
 spring:
   application:
-    name: selmag-customer-app # becomes service.name in Tempo; matches the Loki label
+    name: selmag-customer-app
   security:
     oauth2:
       resourceserver:
@@ -29,17 +29,15 @@ spring:
               - view_catalogue
   cloud:
     loadbalancer:
-      enabled: false # standalone calls fixed localhost URIs; no service discovery
+      enabled: false
 management:
   tracing:
     sampling:
-      probability: 1.0 # default 0.1 — sample everything locally
+      probability: 1.0
   opentelemetry:
     tracing:
       export:
         otlp:
-          # Boot 4 has no default endpoint: without this property no exporter is created.
-          # The /v1/traces path is required for transport http.
           endpoint: http://localhost:4318/v1/traces
           transport: http
   otlp:
@@ -55,8 +53,6 @@ management:
     web:
       exposure:
         include: '*'
-# standalone: the Eureka client starter is on the classpath, so registration must be
-# switched off explicitly. No discovery, no client-side load balancing here.
 eureka:
   client:
     enabled: false

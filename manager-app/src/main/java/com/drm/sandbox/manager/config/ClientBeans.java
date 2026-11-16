@@ -21,18 +21,14 @@ public class ClientBeans {
             // Auto-configured prototype builder: carries observations (client spans, client metrics,
             // traceparent propagation). A bare RestClient.builder() would lose all of that.
             RestClient.Builder restClientBuilder,
-            // Present only when the load balancer is enabled (cloud profile); empty in
-            // standalone/tests, where spring.cloud.loadbalancer.enabled=false.
-            ObjectProvider<DeferringLoadBalancerInterceptor> loadBalancerInterceptor,
+            ObjectProvider<DeferringLoadBalancerInterceptor> loadBalancerInterceptor,  // empty in standalone/tests profile
             ClientRegistrationRepository clientRegistrationRepository,
             OAuth2AuthorizedClientRepository authorizedClientRepository,
             @Value("${selmag.services.catalogue.registration-id:keycloak}") String registrationId) {
         RestClient.Builder builder = restClientBuilder.baseUrl(catalogueBaseUri);
         // LB interceptor first: it rewrites the service-id host to a real instance URI and passes
         // the rewritten request down the chain; the OAuth interceptor then adds the Bearer token.
-        // The interceptor is injected explicitly instead of via @LoadBalanced: a @LoadBalanced
-        // RestClient.Builder bean would suppress Boot's auto-configured builder and be picked up by
-        // the Eureka transport, which would then treat localhost:8761 as a service-id.
+        // The interceptor is injected explicitly instead of via @LoadBalanced
         loadBalancerInterceptor.ifAvailable(builder::requestInterceptor);
         builder.requestInterceptor(new OAuthClientHttpRequestInterceptor(
                 new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository,

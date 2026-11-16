@@ -5,14 +5,10 @@ spring:
     password: selmag
   cloud:
     loadbalancer:
-      enabled: false # tests run without Eureka and must not try to load-balance
-
-# Tests never activate the cloud profile, so application-cloud.yaml cannot switch the
-# Eureka client off for them — it has to be done here, in the test resources.
+      enabled: false
 eureka:
   client:
     enabled: false
-
 management:
   tracing:
     export:

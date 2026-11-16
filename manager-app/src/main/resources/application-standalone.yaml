@@ -5,7 +5,7 @@ selmag:
       registration-id: keycloak
 spring:
   application:
-    name: selmag-manager-app # becomes service.name in Tempo; matches the Loki label
+    name: selmag-manager-app
   datasource:
     url: jdbc:postgresql://localhost:5433/manager
     username: manager
@@ -31,17 +31,15 @@ spring:
               - microprofile-jwt
   cloud:
     loadbalancer:
-      enabled: false # standalone calls fixed localhost URIs; no service discovery
+      enabled: false
 management:
   tracing:
     sampling:
-      probability: 1.0 # local demo: 100%; production should use 0.1
+      probability: 0.1
   opentelemetry:
     tracing:
       export:
         otlp:
-          # Boot 4 has no default endpoint: without this property no exporter is created.
-          # The /v1/traces path is required for transport http.
           endpoint: http://localhost:4318/v1/traces
           transport: http
   otlp:
@@ -57,8 +55,6 @@ management:
     web:
       exposure:
         include: '*'
-# standalone: the Eureka client starter is on the classpath, so registration must be
-# switched off explicitly. No discovery, no client-side load balancing here.
 eureka:
   client:
     enabled: false

@@ -1,10 +1,7 @@
 spring:
   cloud:
     loadbalancer:
-      enabled: false # tests run without Eureka and must not try to load-balance
-
-# Tests never activate the cloud profile, so application-cloud.yml cannot switch the
-# Eureka client off for them — it has to be done here, in the test resources.
+      enabled: false
 eureka:
   client:
     enabled: false
@@ -12,8 +9,8 @@ eureka:
 management:
   tracing:
     export:
-      enabled: false # tests must not try to export spans to a missing Tempo
+      enabled: false
   otlp:
     metrics:
       export:
-        enabled: false # metrics stay in Prometheus; no OTLP metrics in tests
+        enabled: false

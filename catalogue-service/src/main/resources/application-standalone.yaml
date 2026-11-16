@@ -1,6 +1,6 @@
 spring:
   application:
-    name: selmag-catalogue-service # becomes service.name in Tempo; matches the Loki label
+    name: selmag-catalogue-service
   security:
     oauth2:
       resourceserver:
@@ -23,8 +23,6 @@ spring:
         url: http://localhost:8085
         instance:
           name: catalogue-service
-          # Register URLs by IP instead of hostname, so the admin server reaches
-          # this instance at http://<ip>:8081/... rather than http://<hostname>:8081/...
           service-host-type: ip
         enabled: true
   datasource:
@@ -39,16 +37,12 @@ spring:
     show-sql: true
   cloud:
     loadbalancer:
-      enabled: false # standalone calls fixed localhost URIs; no service discovery
+      enabled: false # standalone profile - no service discovery
 server:
   port: 8081
 logging:
   level:
     sql: info
-#  file:  # чтобы видеть логи на админке
-#    name: logs/catalogue-service.log
-#  pattern:
-#    file: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr(${PID}){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx"
 springdoc:
   swagger-ui:
     oauth:
@@ -56,16 +50,14 @@ springdoc:
       use-pkce-with-authorization-code-grant: true
 keycloak:
   uri: http://localhost:8082
-management: # specify export metrics, which one should be exposed
+management:
   tracing:
     sampling:
-      probability: 1.0 # local demo: 100%; production should use 0.1
+      probability: 0.1
   opentelemetry:
     tracing:
       export:
         otlp:
-          # Boot 4 has no default endpoint: without this property no exporter is created.
-          # The /v1/traces path is required for transport http.
           endpoint: http://localhost:4318/v1/traces
           transport: http
   otlp:
@@ -73,16 +65,14 @@ management: # specify export metrics, which one should be exposed
       export:
         enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
-    livenessstate: ## живое ли приложение
+    livenessstate:
       enabled: true
-    readinessstate: ## можно ли вообще от сервиса этого что-то получить
+    readinessstate:
       enabled: true
   endpoints:
     web:
       exposure:
-        include: '*' # exposes /actuator/prometheus for VictoriaMetrics (and everything Spring Boot Admin needs)
-# standalone: the Eureka client starter is on the classpath, so registration must be
-# switched off explicitly. No discovery, no client-side load balancing here.
+        include: '*'
 eureka:
   client:
-    enabled: false
+    enabled: false # standalone profile - no service discovery

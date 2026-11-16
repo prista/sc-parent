@@ -48,11 +48,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
         </dependency>
-        <!-- Service discovery: registers in eureka-server and resolves selmag-catalogue-service
-             by service-id. No version: managed by the Spring Cloud BOM;
-             spring-cloud-starter-loadbalancer arrives transitively (used explicitly through
-             DeferringLoadBalancerInterceptor, never through @LoadBalanced).
-             @EnableDiscoveryClient is not needed. -->
+        <!-- Service discovery -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
