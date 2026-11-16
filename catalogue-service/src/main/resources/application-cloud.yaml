@@ -1,0 +1,89 @@
+# Cloud profile — self-contained configuration (run with SPRING_PROFILES_ACTIVE=cloud).
+# This is a full copy of application-standalone.yaml; it is NOT layered on top of it.
+# Differences from standalone:
+#   * eureka.* block: registers in eureka-server and fetches the registry from it.
+spring:
+  application:
+    name: selmag-catalogue-service # becomes service.name in Tempo and the Eureka application id
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
+      client:
+        registration:
+          keycloak:
+            client-id: catalogue-service-metrics-client
+            client-secret: XzsC20nVY1uDO1xDAE1o7QsqkRqRyban
+            authorization-grant-type: client_credentials
+            scope:
+              - metrics_server
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
+  boot:
+    admin:
+      client:
+        url: http://localhost:8085
+        instance:
+          name: catalogue-service
+          # Register URLs by IP instead of hostname, so the admin server reaches
+          # this instance at http://<ip>:8081/... rather than http://<hostname>:8081/...
+          service-host-type: ip
+        enabled: true
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalogue
+    username: catalogue
+    password: catalogue
+  flyway:
+    schemas:
+      - public
+      - catalogue
+  jpa:
+    show-sql: true
+server:
+  port: 8081
+logging:
+  level:
+    sql: info
+springdoc:
+  swagger-ui:
+    oauth:
+      client-id: catalogue-service-swagger-ui
+      use-pkce-with-authorization-code-grant: true
+keycloak:
+  uri: http://localhost:8082
+management: # specify export metrics, which one should be exposed
+  tracing:
+    sampling:
+      probability: 1.0 # local demo: 100%; production should use 0.1
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Boot 4 has no default endpoint: without this property no exporter is created.
+          # The /v1/traces path is required for transport http.
+          endpoint: http://localhost:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
+  health:
+    livenessstate: ## живое ли приложение
+      enabled: true
+    readinessstate: ## можно ли вообще от сервиса этого что-то получить
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*' # exposes /actuator/prometheus for VictoriaMetrics (and everything Spring Boot Admin needs)
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5       # local development; in prod — 30
+    lease-expiration-duration-in-seconds: 10   # local development; in prod — 90
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5         # local development; in prod — 30

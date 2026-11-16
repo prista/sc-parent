@@ -223,7 +223,7 @@ create table user_management.t_user_2_authority (
 
 ### 5.3 `feedback-service` — MongoDB storage
 
-The `feedback-service` does not use PostgreSQL at all. It stores `FavouriteProduct` and `ProductReview` documents in MongoDB (`mongodb://localhost:27017/feedback`) through two reactive repositories, `FavouriteProductRepository` and `ProductReviewRepository` (both extend `ReactiveCrudRepository`, returning `Mono`/`Flux`). There is no schema and no Flyway; Spring Data derives the collections from the entity class names (`productReview`, `favouriteProduct`). Both documents carry a `userId` — the `sub` claim of the JWT that created them — and `FavouriteProductRepository` derives user-scoped queries from its method names (`findAllByUserId`, `findByProductIdAndUserId`, `deleteByProductIdAndUserId`). See `MONGO.md` for a walkthrough of the Mongo model.
+The `feedback-service` does not use PostgreSQL at all. It stores `FavouriteProduct` and `ProductReview` documents in MongoDB (`mongodb://localhost:27017/feedback`) through two reactive repositories, `FavouriteProductRepository` and `ProductReviewRepository` (both extend `ReactiveCrudRepository`, returning `Mono`/`Flux`). There is no schema and no Flyway; Spring Data derives the collections from the entity class names (`productReview`, `favouriteProduct`). Both documents carry a `userId` — the `sub` claim of the JWT that created them — and `FavouriteProductRepository` derives user-scoped queries from its method names (`findAllByUserId`, `findByProductIdAndUserId`, `deleteByProductIdAndUserId`). See `docs/MONGO.md` for a walkthrough of the Mongo model.
 
 ### 5.4 MongoDB UUID Representation (`feedback-service`)
 

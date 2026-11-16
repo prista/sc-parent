@@ -3,7 +3,9 @@ package com.drm.sandbox.customer.config;
 import com.drm.sandbox.customer.client.WebClientFavouriteProductsClient;
 import com.drm.sandbox.customer.client.WebClientProductReviewsClient;
 import com.drm.sandbox.customer.client.WebClientProductsClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.reactive.DeferringLoadBalancerExchangeFilterFunction;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
@@ -20,14 +22,22 @@ public class ClientConfig {
      * Built from the auto-configured prototype {@link WebClient.Builder} (observations, codecs,
      * HTTP connector) plus the token-relay filter, so every call carries the signed-in user's
      * access token as {@code Authorization: Bearer ...}.
+     * <p>
+     * The load-balancer filter is added explicitly (not through {@code @LoadBalanced}): it is
+     * present only in the cloud profile and rewrites the service-id host
+     * ({@code http://selmag-catalogue-service}) into a real instance URI. It goes first so the
+     * URI is rewritten before token relay attaches the {@code Authorization} header.
      */
     @Bean
     public WebClientProductsClient webClientProductsClient(
             @Value("${selmag.services.catalogue.uri:http://localhost:8081}") String catalogueBaseUrl,
             WebClient.Builder webClientBuilder,
+            // Present only when the load balancer is enabled (cloud profile).
+            ObjectProvider<DeferringLoadBalancerExchangeFilterFunction<?>> loadBalancerFilter,
             ReactiveClientRegistrationRepository clientRegistrationRepository,
             ServerOAuth2AuthorizedClientRepository authorizedClientRepository
     ) {
+        loadBalancerFilter.ifAvailable(webClientBuilder::filter);
         return new WebClientProductsClient(webClientBuilder
                 .baseUrl(catalogueBaseUrl)
                 .filter(keycloakTokenRelay(clientRegistrationRepository, authorizedClientRepository))
@@ -45,9 +55,11 @@ public class ClientConfig {
     public WebClientFavouriteProductsClient webClientFavouriteProductsClient(
             @Value("${selmag.services.feedback.uri:http://localhost:8084}") String feedbackBaseUrl,
             WebClient.Builder webClientBuilder,
+            ObjectProvider<DeferringLoadBalancerExchangeFilterFunction<?>> loadBalancerFilter,
             ReactiveClientRegistrationRepository clientRegistrationRepository,
             ServerOAuth2AuthorizedClientRepository authorizedClientRepository
     ) {
+        loadBalancerFilter.ifAvailable(webClientBuilder::filter);
         return new WebClientFavouriteProductsClient(webClientBuilder
                 .baseUrl(feedbackBaseUrl)
                 .filter(keycloakTokenRelay(clientRegistrationRepository, authorizedClientRepository))
@@ -65,9 +77,11 @@ public class ClientConfig {
     public WebClientProductReviewsClient webClientProductReviewsClient(
             @Value("${selmag.services.feedback.uri:http://localhost:8084}") String feedbackBaseUrl,
             WebClient.Builder webClientBuilder,
+            ObjectProvider<DeferringLoadBalancerExchangeFilterFunction<?>> loadBalancerFilter,
             ReactiveClientRegistrationRepository clientRegistrationRepository,
             ServerOAuth2AuthorizedClientRepository authorizedClientRepository
     ) {
+        loadBalancerFilter.ifAvailable(webClientBuilder::filter);
         return new WebClientProductReviewsClient(webClientBuilder
                 .baseUrl(feedbackBaseUrl)
                 .filter(keycloakTokenRelay(clientRegistrationRepository, authorizedClientRepository))

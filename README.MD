@@ -23,7 +23,7 @@ kill -9 <PID>
 
 `--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
-**Профиль `standalone` и запуск приложений.** Все сервисы держат локальную конфигурацию в `application-standalone.*` (порты, datasource/MongoDB, Keycloak, management-эндпоинты), поэтому запускать их нужно **с профилем `standalone`** — без него эти файлы не загрузятся:
+**Профиль `standalone` и запуск приложений.** Все сервисы держат локальную конфигурацию в `application-standalone.*` (порты, datasource/MongoDB, Keycloak, management-эндпоинты), поэтому запускать их нужно **с профилем `standalone`** (либо `cloud` для режима с Eureka — см. ниже) — без профиля эти файлы не загрузятся:
 
 ```bash
 SPRING_PROFILES_ACTIVE=standalone ./mvnw -pl manager-app spring-boot:run
@@ -38,6 +38,34 @@ SPRING_PROFILES_ACTIVE=standalone LOKI=http://127.0.0.1:3100 \
 ```
 
 `LOKI` должна быть видна процессу приложения: переменная окружения при запуске из терминала или поле **Environment variables** в run configuration IDE. Без неё приложение пишет логи как обычно — только в консоль.
+
+**Профиль `cloud`: Eureka и клиентский load balancing.** Помимо `standalone`, у четырёх бизнес-сервисов есть самодостаточный профиль `cloud`: `application-cloud.*` — полная копия standalone-конфигурации с точечными отличиями (`spring.profiles.group` и `spring.config.import` не используются). В нём сервисы регистрируются в `eureka-server` (порт `8761`) и находят друг друга по service-id — `spring.application.name`:
+
+| Сервис | service-id (`spring.application.name`) | Порт | Кого вызывает |
+|---|---|---|---|
+| `eureka-server` | `selmag-eureka-server` (сам не регистрируется) | 8761 | — |
+| `catalogue-service` | `selmag-catalogue-service` | 8081 | — |
+| `feedback-service` | `selmag-feedback-service` | 8084 | — |
+| `manager-app` | `selmag-manager-app` | 8080 | `catalogue-service` |
+| `customer-app` | `selmag-customer-app` | 8083 | `catalogue-service`, `feedback-service` |
+| `admin-server` | — (намеренно вне Eureka) | 8085 | — |
+
+Порядок запуска: `eureka-server` → инфраструктура (Keycloak, PostgreSQL, MongoDB) → бизнес-сервисы с `SPRING_PROFILES_ACTIVE=cloud` → при необходимости `admin-server`.
+
+**Профили в режиме Eureka:** на `cloud` переключаются **все четыре бизнес-сервиса** (`catalogue-service`, `feedback-service`, `manager-app`, `customer-app`). **`eureka-server` и `admin-server` остаются на `standalone`** — cloud-профиля у них нет: eureka сам является реестром и никуда не регистрируется, а admin-server намеренно остаётся вне Eureka. У `eureka-server` единственный файл — `application-standalone.yml`. Подробная инструкция, матрица профилей и типичные ошибки — в `docs/CLOUD-SERVICES.md`.
+
+```bash
+SPRING_PROFILES_ACTIVE=standalone ./mvnw -pl eureka-server spring-boot:run
+SPRING_PROFILES_ACTIVE=cloud ./mvnw -pl catalogue-service spring-boot:run
+# аналогично feedback-service, manager-app, customer-app
+SPRING_PROFILES_ACTIVE=standalone ./mvnw -pl admin-server spring-boot:run
+```
+
+- **URI сервисов — только `http://<service-id>`** (`http://selmag-catalogue-service`, `http://selmag-feedback-service`), **не `lb://…`**: service-id берётся из `URI.getHost()`, а схему подставляет `LoadBalancerUriTools`; `lb://` — недокументированное поведение, которое ломается на других discovery-клиентах.
+- Лоад-балансер подключён без `@LoadBalanced`: `manager-app` добавляет в свой `RestClient` `DeferringLoadBalancerInterceptor`, `customer-app` — `DeferringLoadBalancerExchangeFilterFunction` в три `WebClient`. Оба внедряются через `ObjectProvider`, поэтому в `standalone` и тестах бина нет и клиенты работают как раньше. `@LoadBalanced` не используется: он подавил бы авто-конфигурированный `RestClient.Builder`/`WebClient.Builder` (наблюдения, клиентские спаны, `traceparent`) и попал бы в транспорт Eureka-клиента.
+- Если `catalogue-service` остановить, `manager-app` отдаёт ошибку `No instances available for selmag-catalogue-service` (а не `Connection refused` к `localhost:8081`); после перезапуска сервис снова появляется в реестре без перезапуска клиентов.
+- **Eureka в этой конфигурации без аутентификации.** Регистрация и чтение реестра токена не требуют, новых клиентов и client scope'ов в Keycloak нет. На дашборде `http://localhost:8761/` будет предупреждение `SELF PRESERVATION MODE IS TURNED OFF` — это ожидаемо: `enable-self-preservation: false` задан, чтобы мёртвые инстансы исчезали через 5 секунд.
+- `standalone` и тесты Eureka не используют: в `application-standalone.*` и в тестовых `application.yml` стоят `eureka.client.enabled: false` и `spring.cloud.loadbalancer.enabled: false`, поэтому `./mvnw test` проходит без запущенной Eureka.
 
 **Зачем VictoriaMetrics.** Приложения не отправляют метрики сами — они лишь экспонируют текущий снимок на `/actuator/prometheus`, а `selmag-metrics` раз в 60 с (по умолчанию) скрапит его (`config/victoria-metrics/promscrape.yaml`) и хранит сэмплы с таймстампами в своей TSDB. Поэтому история переживает падение и рестарт приложения (Spring Boot Admin показывает только «сейчас»), виден сам факт падения (`up{job="…"} == 0`, разрыв в скрапах) и значения до него, а все сервисы собираются в одном месте — по этой истории строятся дашборды и алерты. Посмотреть метрики без дашбордов — `http://localhost:8428/vmui/`.
 
@@ -65,7 +93,7 @@ SPRING_PROFILES_ACTIVE=standalone LOKI=http://127.0.0.1:3100 \
 
 **Папка `data/grafana`.** Мы создаём только пустой каталог (`mkdir -p data/grafana`); файлы в нём появляются при первом старте Grafana и дальше наполняются автоматически. `./data/grafana` смонтирован в `/var/lib/grafana` — это `[paths] data` Grafana: внутри `grafana.db` (SQLite: пользователи, дашборды, datasource'ы, настройки), каталог `plugins/`, а также временные `csv/`, `pdf/`, `png/` для экспорта и рендеринга. Bind mount нужен, чтобы дашборды и настройки переживали пересоздание контейнера: удалить `data/grafana` — значит сбросить Grafana к дефолту. Флаг `-u "$(id -u)"` — рекомендуемый официальной документацией приём для bind mount: контейнер пишет в `./data/grafana` от твоего UID, поэтому файлы не остаются root-owned.
 
-Практическая инструкция — какие datasource'ы заводить, что где смотреть, как добавить JVM-дашборд с логами из Loki — в [`MONITORING.md`](MONITORING.md).
+Практическая инструкция — какие datasource'ы заводить, что где смотреть, как добавить JVM-дашборд с логами из Loki — в [`docs/MONITORING.md`](docs/MONITORING.md).
 
 ## SSR
 
@@ -166,6 +194,8 @@ log.info("Principal {}", ((JwtAuthenticationToken) principal).getToken().getClai
 | Исходящие вызовы | — | interceptor → Bearer-токен юзера |
 
 **`customer-app` — OAuth2 client и resource server для `/actuator/**`.** Для UI всё как раньше: `anyExchange().authenticated()` + `oauth2Login`, CSRF включён (POST-формы Thymeleaf). Отдельная цепочка фильтров (`@Order(0)`, `securityMatcher("/actuator/**")`) валидирует Bearer JWT и требует `SCOPE_metrics` — по этому токену (`victoria-metrics`, `client_credentials`, scope `metrics`) VictoriaMetrics скрапит `/actuator/prometheus`. Spring Boot Admin-клиента у `customer-app` нет. Тесты этой цепочки — `ActuatorSecurityIT` (без токена → 401, без scope → 403, со `SCOPE_metrics` → 200).
+
+**`eureka-server` — вне OAuth2.** Это внутренний инфраструктурный компонент, как `admin-server` вне Eureka: аутентификации нет (из `pom.xml` убраны `spring-boot-starter-oauth2-*`, иначе дефолтная basic-аутентификация Boot закрыла бы `/eureka/**`), в Keycloak нет ни клиента, ни scope для discovery. Если защита Eureka понадобится, это отдельная задача: скоуп и клиенты в Keycloak, `SecurityConfig` в `eureka-server` и Bearer-интерсептор в транспорте Eureka каждого сервиса.
 
 ### Покрытие тестами
 

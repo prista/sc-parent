@@ -1,6 +1,6 @@
 # Мониторинг: метрики, логи и трейсы
 
-Практическая инструкция: что запущено, какие адреса использовать, какие datasource'ы завести в Grafana и где смотреть каждый тип данных. Зачем нужны VictoriaMetrics, Loki, Tempo и почему выбран OTLP, а не Zipkin, — в `README.MD`.
+Практическая инструкция: что запущено, какие адреса использовать, какие datasource'ы завести в Grafana и где смотреть каждый тип данных. Зачем нужны VictoriaMetrics, Loki, Tempo и почему выбран OTLP, а не Zipkin, — в `../README.MD`.
 
 ## Общая картина
 
@@ -26,7 +26,7 @@
 | Tempo | `selmag-tempo` | http://127.0.0.1:3200, OTLP `4317`/`4318` | трейсы | нет, без volume |
 | Keycloak | `selmag-keycloak` | http://127.0.0.1:8082 | — (нужен для OAuth2-скрапа) | нет, dev-режим |
 
-Команды запуска контейнеров — в `README.MD`. Grafana: `admin` / `admin`, при первом входе попросит сменить пароль.
+Команды запуска контейнеров — в `../README.MD`. Grafana: `admin` / `admin`, при первом входе попросит сменить пароль.
 
 ## Два вида адресов: `127.0.0.1` и `host.docker.internal`
 
@@ -204,9 +204,28 @@ Loki буферизует записи: батч уходит раз в 60 се�
 
 Пример панели:
 
-![Панель логов из Loki в дашборде JVM (Micrometer)](config/grafana/loki_logs_panel.png)
+![Панель логов из Loki в дашборде JVM (Micrometer)](../config/grafana/loki_logs_panel.png)
 
 Если панель пустая: приложение запущено без `LOKI`, ещё не прошёл 60-секундный батч или выбрано другое значение `application`.
+
+## Service discovery (Eureka) и мониторинг
+
+`eureka-server` (`http://localhost:8761`) — не бэкенд наблюдаемости: он не хранит метрики, логи или трейсы и сам не инструментирован. Он нужен только для того, чтобы в профиле `cloud` сервисы находили друг друга по service-id (`selmag-catalogue-service`, `selmag-feedback-service`). Как запускать сервисы в этом режиме (все четыре бизнес-сервиса — с `cloud`, `admin-server` и `eureka-server` — с `standalone`) — см. `CLOUD-SERVICES.md`.
+
+Что не меняется при переходе `standalone` → `cloud`:
+
+- `spring.application.name` остаётся прежним, поэтому `service.name` в Tempo и метка `app` в Loki не меняются;
+- `/actuator/prometheus` по-прежнему скрапится VictoriaMetrics по `localhost:8080/8081/8083/8084` — скрапер не ходит через Eureka;
+- OTLP-трейсинг (`http://localhost:4318/v1/traces`) и propagation `traceparent` работают и через load balancer: клиентский спан создаётся наблюдениями авто-конфигурированного `RestClient.Builder`/`WebClient.Builder`, поэтому LB-интерсептор/фильтр добавляется в конкретный клиент, а не через `@LoadBalanced`.
+
+Проверить реестр:
+
+```bash
+curl -s -H 'Accept: application/json' http://localhost:8761/eureka/apps \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); print(sorted(a['name'] for a in d['applications']['application']))"
+```
+
+Ожидаемо четыре приложения: `SELMAG-CATALOGUE-SERVICE`, `SELMAG-CUSTOMER-APP`, `SELMAG-FEEDBACK-SERVICE`, `SELMAG-MANAGER-APP`; `selmag-eureka-server` (сам не регистрируется) и admin-service отсутствуют. Дашборд: `http://localhost:8761/`; предупреждение `SELF PRESERVATION MODE IS TURNED OFF` — ожидаемое для локальной конфигурации.
 
 ## Быстрая самопроверка
 
@@ -224,9 +243,13 @@ curl -s http://127.0.0.1:3200/ready
 
 # Grafana жива
 curl -s http://127.0.0.1:3000/api/health
+
+# Eureka видит четыре бизнес-сервиса (профиль cloud)
+curl -s -H 'Accept: application/json' http://127.0.0.1:8761/eureka/apps \
+  | python3 -c "import json,sys; print(len(json.load(sys.stdin)['applications']['application']))"
 ```
 
-Ожидаемо: VictoriaMetrics показывает 5 активных target'ов с `health: up`; `/loki/api/v1/labels` возвращает `["app","host","level",...]`; Tempo отвечает `ready`; Grafana — `{"database":"ok",...}`.
+Ожидаемо: VictoriaMetrics показывает 5 активных target'ов с `health: up`; `/loki/api/v1/labels` возвращает `["app","host","level",...]`; Tempo отвечает `ready`; Grafana — `{"database":"ok",...}`; Eureka — `4`.
 
 Типичные ошибки:
 

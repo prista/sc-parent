@@ -1,0 +1,24 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: selmag-eureka-server
+
+# Single local node, deliberately unauthenticated (see eureka-server/pom.xml).
+# The "SELF PRESERVATION MODE IS TURNED OFF" warning on the dashboard is expected
+# for this local configuration.
+eureka:
+  instance:
+    hostname: localhost
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      # Key is case-sensitive: defaultZone, not default-zone. Kept even with
+      # register-with-eureka/fetch-registry off — this is the official standalone example.
+      defaultZone: http://localhost:8761/eureka/
+  server:
+    enable-self-preservation: false      # one local node: dead instances must disappear
+    eviction-interval-timer-in-ms: 5000  # default 60000
+    use-read-only-response-cache: false  # dashboard/registry refresh immediately

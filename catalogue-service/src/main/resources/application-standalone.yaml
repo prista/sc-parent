@@ -37,6 +37,9 @@ spring:
       - catalogue
   jpa:
     show-sql: true
+  cloud:
+    loadbalancer:
+      enabled: false # standalone calls fixed localhost URIs; no service discovery
 server:
   port: 8081
 logging:
@@ -78,3 +81,8 @@ management: # specify export metrics, which one should be exposed
     web:
       exposure:
         include: '*' # exposes /actuator/prometheus for VictoriaMetrics (and everything Spring Boot Admin needs)
+# standalone: the Eureka client starter is on the classpath, so registration must be
+# switched off explicitly. No discovery, no client-side load balancing here.
+eureka:
+  client:
+    enabled: false

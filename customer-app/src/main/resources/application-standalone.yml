@@ -27,6 +27,9 @@ spring:
             scope:
               - openid
               - view_catalogue
+  cloud:
+    loadbalancer:
+      enabled: false # standalone calls fixed localhost URIs; no service discovery
 management:
   tracing:
     sampling:
@@ -52,3 +55,8 @@ management:
     web:
       exposure:
         include: '*'
+# standalone: the Eureka client starter is on the classpath, so registration must be
+# switched off explicitly. No discovery, no client-side load balancing here.
+eureka:
+  client:
+    enabled: false

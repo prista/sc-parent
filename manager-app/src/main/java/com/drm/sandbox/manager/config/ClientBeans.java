@@ -2,10 +2,11 @@ package com.drm.sandbox.manager.config;
 
 import com.drm.sandbox.manager.client.RestClientProductsRestClient;
 import com.drm.sandbox.manager.security.OAuthClientHttpRequestInterceptor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.client.loadbalancer.DeferringLoadBalancerInterceptor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.support.BasicAuthenticationInterceptor;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizedClientManager;
 import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
@@ -20,15 +21,22 @@ public class ClientBeans {
             // Auto-configured prototype builder: carries observations (client spans, client metrics,
             // traceparent propagation). A bare RestClient.builder() would lose all of that.
             RestClient.Builder restClientBuilder,
+            // Present only when the load balancer is enabled (cloud profile); empty in
+            // standalone/tests, where spring.cloud.loadbalancer.enabled=false.
+            ObjectProvider<DeferringLoadBalancerInterceptor> loadBalancerInterceptor,
             ClientRegistrationRepository clientRegistrationRepository,
             OAuth2AuthorizedClientRepository authorizedClientRepository,
             @Value("${selmag.services.catalogue.registration-id:keycloak}") String registrationId) {
-        return new RestClientProductsRestClient(restClientBuilder
-                .baseUrl(catalogueBaseUri)
-                .requestInterceptor(
-                        new OAuthClientHttpRequestInterceptor(
-                                new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository,
-                                        authorizedClientRepository), registrationId))
-                .build());
+        RestClient.Builder builder = restClientBuilder.baseUrl(catalogueBaseUri);
+        // LB interceptor first: it rewrites the service-id host to a real instance URI and passes
+        // the rewritten request down the chain; the OAuth interceptor then adds the Bearer token.
+        // The interceptor is injected explicitly instead of via @LoadBalanced: a @LoadBalanced
+        // RestClient.Builder bean would suppress Boot's auto-configured builder and be picked up by
+        // the Eureka transport, which would then treat localhost:8761 as a service-id.
+        loadBalancerInterceptor.ifAvailable(builder::requestInterceptor);
+        builder.requestInterceptor(new OAuthClientHttpRequestInterceptor(
+                new DefaultOAuth2AuthorizedClientManager(clientRegistrationRepository,
+                        authorizedClientRepository), registrationId));
+        return new RestClientProductsRestClient(builder.build());
     }
 }

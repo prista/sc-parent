@@ -8,6 +8,15 @@ spring:
     url: jdbc:tc:postgresql:17.4-alpine:///manager?TC_DAEMON=true
     username: manager
     password: manager
+  cloud:
+    loadbalancer:
+      enabled: false # tests run without Eureka and must not try to load-balance
+
+# Tests never activate the cloud profile, so application-cloud.yaml cannot switch the
+# Eureka client off for them — it has to be done here, in the test resources.
+eureka:
+  client:
+    enabled: false
 
 management:
   tracing:

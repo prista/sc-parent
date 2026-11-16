@@ -45,6 +45,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Service discovery: registers in eureka-server and resolves catalogue-service /
+             feedback-service by service-id. No version: managed by the Spring Cloud BOM;
+             spring-cloud-starter-loadbalancer arrives transitively (used explicitly through
+             DeferringLoadBalancerExchangeFilterFunction, never through @LoadBalanced).
+             @EnableDiscoveryClient is not needed. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
         <!-- to expose metrics in Prometheus format on /actuator/prometheus -->
         <dependency>
             <groupId>io.micrometer</groupId>

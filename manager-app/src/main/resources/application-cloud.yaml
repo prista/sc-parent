@@ -1,0 +1,75 @@
+# Cloud profile — self-contained configuration (run with SPRING_PROFILES_ACTIVE=cloud).
+# This is a full copy of application-standalone.yaml; it is NOT layered on top of it.
+# Differences from standalone:
+#   * selmag.services.catalogue.uri points at the service-id instead of localhost:8081;
+#     the load balancer resolves it through Eureka. The canonical form is
+#     http://<service-id> (the lb: scheme is not used).
+#   * server.port is set explicitly (standalone relies on the 8080 default).
+#   * eureka.* block: registers in eureka-server and fetches the registry from it.
+selmag:
+  services:
+    catalogue:
+      uri: http://selmag-catalogue-service
+      registration-id: keycloak
+spring:
+  application:
+    name: selmag-manager-app # becomes service.name in Tempo and the Eureka application id
+  datasource:
+    url: jdbc:postgresql://localhost:5433/manager
+    username: manager
+    password: manager
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
+            user-name-attribute: preferred_username
+        registration:
+          keycloak:
+            client-id: manager-app
+            client-secret: GrMdYSYyh3L4Cl1tsVXFnHI2CrZonsfN
+            scope:
+              - openid
+              - view_catalogue
+              - edit_catalogue
+              - microprofile-jwt
+server:
+  port: 8080
+management:
+  tracing:
+    sampling:
+      probability: 1.0 # local demo: 100%; production should use 0.1
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Boot 4 has no default endpoint: without this property no exporter is created.
+          # The /v1/traces path is required for transport http.
+          endpoint: http://localhost:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5       # local development; in prod — 30
+    lease-expiration-duration-in-seconds: 10   # local development; in prod — 90
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5         # local development; in prod — 30

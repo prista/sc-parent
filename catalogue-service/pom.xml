@@ -36,6 +36,16 @@
             <artifactId>spring-boot-starter-oauth2-client</artifactId>
         </dependency>
 
+        <!-- Service discovery: registers in eureka-server and resolves peers by service-id.
+             No version: managed by the Spring Cloud BOM. It also brings
+             spring-cloud-starter-loadbalancer transitively, so the client-side LB is not
+             declared explicitly. @EnableDiscoveryClient is not needed: the DiscoveryClient
+             implementation on the classpath turns registration on automatically. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
         <!-- 1. Spring Data JPA for working with database data -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

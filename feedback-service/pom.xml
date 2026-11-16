@@ -33,6 +33,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
+        <!-- Service discovery: registers in eureka-server. No version: managed by the
+             Spring Cloud BOM; spring-cloud-starter-loadbalancer arrives transitively.
+             @EnableDiscoveryClient is not needed. -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
