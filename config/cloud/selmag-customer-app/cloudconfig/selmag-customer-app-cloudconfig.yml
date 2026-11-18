@@ -1,0 +1,64 @@
+selmag:
+  services:
+    catalogue:
+      uri: http://selmag-catalogue-service
+    feedback:
+      uri: http://selmag-feedback-service
+spring:
+  boot:
+    admin:
+      client:
+        enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
+            user-name-attribute: preferred_username
+        # Единственный registration: authorization_code + token relay — токен юзера
+        # пересылается вниз по цепочке, поэтому client_credentials не нужен.
+        registration:
+          keycloak:
+            client-id: customer-app
+            client-secret: vKR4vMsL2JtUMh9dN7adffMqY4Qn109m
+            authorization-grant-type: authorization_code
+            scope:
+              - openid
+              - view_catalogue
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5
+
