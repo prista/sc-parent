@@ -29,6 +29,9 @@ spring:
               - view_catalogue
               - edit_catalogue
               - microprofile-jwt
+  cloud:
+    config:
+      enabled: false # cloud profile - configuration comes from local files
 server:
   port: 8080
 management:
@@ -46,6 +49,8 @@ management:
       export:
         enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
+    config:
+      enabled: false # config client is disabled in this profile
     livenessstate:
       enabled: true
     readinessstate:

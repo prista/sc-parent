@@ -29,6 +29,9 @@ spring:
             scope:
               - openid
               - view_catalogue
+  cloud:
+    config:
+      enabled: false # cloud profile - configuration comes from local files
 management:
   tracing:
     sampling:
@@ -44,6 +47,8 @@ management:
       export:
         enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
+    config:
+      enabled: false # config client is disabled in this profile
     livenessstate:
       enabled: true
     readinessstate:

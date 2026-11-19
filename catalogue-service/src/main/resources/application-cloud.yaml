@@ -36,6 +36,9 @@ spring:
       - catalogue
   jpa:
     show-sql: true
+  cloud:
+    config:
+      enabled: false # cloud profile - configuration comes from local files
 server:
   port: 8081
 logging:
@@ -63,6 +66,8 @@ management: # specify export metrics, which one should be exposed
       export:
         enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
+    config:
+      enabled: false # config client is disabled in this profile
     livenessstate: ## живое ли приложение
       enabled: true
     readinessstate: ## можно ли вообще от сервиса этого что-то получить

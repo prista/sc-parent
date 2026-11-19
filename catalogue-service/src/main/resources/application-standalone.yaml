@@ -38,6 +38,8 @@ spring:
   cloud:
     loadbalancer:
       enabled: false # standalone profile - no service discovery
+    config:
+      enabled: false # standalone profile - configuration comes from local files
 server:
   port: 8081
 logging:
@@ -65,6 +67,8 @@ management:
       export:
         enabled: false # metrics stay in Prometheus / VictoriaMetrics
   health:
+    config:
+      enabled: false # config client is disabled in this profile
     livenessstate:
       enabled: true
     readinessstate:

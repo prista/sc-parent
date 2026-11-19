@@ -6,10 +6,15 @@ spring:
   cloud:
     loadbalancer:
       enabled: false
+    config:
+      enabled: false # tests must not contact Config Server
 eureka:
   client:
     enabled: false
 management:
+  health:
+    config:
+      enabled: false # config client is disabled in tests
   tracing:
     export:
       enabled: false # tests must not try to export spans to a missing Tempo
