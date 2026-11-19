@@ -39,6 +39,30 @@ SPRING_PROFILES_ACTIVE=standalone LOKI=http://127.0.0.1:3100 \
 
 `LOKI` должна быть видна процессу приложения: переменная окружения при запуске из терминала или поле **Environment variables** в run configuration IDE. Без неё приложение пишет логи как обычно — только в консоль.
 
+**Профиль `cloudconfig`: Spring Cloud Config Server.** Помимо локальных `application-standalone.*` / `application-cloud.*`, четыре бизнес-сервиса умеют читать конфигурацию из `config-server` (порт `8888`). Сервер запускается отдельно — с профилями `standalone,native` (native-бэкенд: файлы из `config/cloud/` этого репозитория) или с профилем `git` (Git-бэкенд: `https://github.com/prista/sc26-config.git`):
+
+```bash
+SPRING_PROFILES_ACTIVE=standalone,native ./mvnw -pl config-server spring-boot:run
+SPRING_PROFILES_ACTIVE=git ./mvnw -pl config-server spring-boot:run
+```
+
+Профиль `native` обязателен: именно он включает filesystem-репозиторий, а `standalone` задаёт только порт и `search-locations`. С одним `standalone` сервер падает на старте с `You need to configure a uri for the git repository`.
+
+Все его эндпоинты закрыты **HTTP Basic** (логин `config`, пароль `config-password` — `config-server/src/main/resources/application.yml`): без учётных данных — `401 Unauthorized`, с ними — `200`:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8888/selmag-catalogue-service/cloudconfig
+curl -s -u config:config-password http://localhost:8888/selmag-catalogue-service/cloudconfig
+```
+
+Клиенты включают config-клиент только профилем `cloudconfig` (`application-cloudconfig.yml`): `spring.config.import: 'optional:configserver:'` и `spring.cloud.config.uri: http://config:config-password@localhost:8888` — логин и пароль зашиты в URI, поэтому клиент сам отправляет их в заголовке `Authorization: Basic`. Профиль **самодостаточный**, как `standalone` и `cloud`: остальная конфигурация (datasource/MongoDB, Keycloak, Eureka, management) приходит из удалённого файла, поэтому его указывают один:
+
+```bash
+SPRING_PROFILES_ACTIVE=cloudconfig ./mvnw -pl catalogue-service spring-boot:run
+```
+
+Комбинировать его с `standalone` или `cloud` нельзя: оба выставляют `spring.cloud.config.enabled: false`, а `application-cloudconfig.yml` это значение не переопределяет — config-клиент останется выключенным. Вне `cloudconfig` клиент выключен во всех `application-standalone.*`, `application-cloud.*` и тестовых `application.yml` (`spring.cloud.config.enabled: false`, `management.health.config.enabled: false`): иначе `spring-cloud-starter-config` падает на старте с `No spring.config.import set`. Native-бэкенд ищет файлы по пути `config/cloud/{application}/{profile}/`, например `config/cloud/selmag-catalogue-service/cloudconfig/selmag-catalogue-service-cloudconfig.yml`. `config-server` не регистрируется в Eureka, не является SBA-клиентом и не использует Keycloak.
+
 **Профиль `cloud`: Eureka и клиентский load balancing.** Помимо `standalone`, у четырёх бизнес-сервисов есть самодостаточный профиль `cloud`: `application-cloud.*` — полная копия standalone-конфигурации с точечными отличиями (`spring.profiles.group` и `spring.config.import` не используются). В нём сервисы регистрируются в `eureka-server` (порт `8761`) и находят друг друга по service-id — `spring.application.name`:
 
 | Сервис | service-id (`spring.application.name`) | Порт | Кого вызывает |

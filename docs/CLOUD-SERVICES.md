@@ -1,6 +1,8 @@
 # Режим Eureka: запуск сервисов с профилем `cloud`
 
-Практическая инструкция по запуску проекта с service discovery (Spring Cloud Netflix Eureka). Архитектура — в `../CLAUDE.md`, локальный запуск без Eureka — в `../README.MD`, наблюдаемость (метрики/логи/трейсы) — в `MONITORING.md`.
+Практическая инструкция по запуску проекта с service discovery (Spring Cloud Netflix Eureka). Архитектура — в `../CLAUDE.md`, локальный запуск без Eureka — в `../README.MD`, наблюдаемость (метрики/логи/трейсы) — в `MONITORING.md`, внешняя конфигурация (`cloudconfig`) — в `../README.MD`.
+
+`config-server` (порт `8888`) к этой матрице отношения не имеет: он не регистрируется в Eureka и запускается отдельно с профилями `standalone,native` или `git`, а сервисы получают из него конфигурацию самодостаточным профилем `cloudconfig` (подробности — в `../README.MD`).
 
 ## Главное правило
 
