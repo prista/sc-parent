@@ -48,6 +48,13 @@ SPRING_PROFILES_ACTIVE=git ./mvnw -pl config-server spring-boot:run
 
 Профиль `native` обязателен: именно он включает filesystem-репозиторий, а `standalone` задаёт только порт и `search-locations`. С одним `standalone` сервер падает на старте с `You need to configure a uri for the git repository`.
 
+Путь к файлам native-бэкенда задан переменной с дефолтом — `search-locations: ${SELMAG_CONFIG_SEARCH_LOCATIONS:file://${user.home}/prog/sel/sc26/config/cloud/{application}/{profile}}`, поэтому его можно переопределить, не трогая конфиг:
+
+```bash
+SELMAG_CONFIG_SEARCH_LOCATIONS='file:///opt/selmag-config/{application}/{profile}' \
+  SPRING_PROFILES_ACTIVE=standalone,native ./mvnw -pl config-server spring-boot:run
+```
+
 Все его эндпоинты закрыты **HTTP Basic** (логин `config`, пароль `config-password` — `config-server/src/main/resources/application.yml`): без учётных данных — `401 Unauthorized`, с ними — `200`:
 
 ```bash
