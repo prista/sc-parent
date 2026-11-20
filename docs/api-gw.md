@@ -62,4 +62,4 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
 
 Проверено: `/actuator/prometheus` → `401` без токена, `403` без scope `metrics`, `200` с токеном; в выдаче есть `spring_cloud_gateway_requests_seconds_*` с метками `routeId`/`routeUri`.
 
-`api-gateway` пока не Spring Boot Admin client: для регистрации нужен отдельный Keycloak-клиент (`api-gateway-metrics-client`, scope `metrics_server`), как у `catalogue-service`/`feedback-service`.
+`api-gateway` — Spring Boot Admin client только в профиле `standalone` (клиент `api-gateway-metrics-client`, scope `metrics_server`; регистрация образца `feedback-service`). В `cloud` SBA выключен (`spring.boot.admin.client.enabled: false`), oauth2-регистрации для регистрации нет.

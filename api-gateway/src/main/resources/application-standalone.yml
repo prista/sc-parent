@@ -4,11 +4,30 @@ server:
 spring:
   application:
     name: selmag-api-gateway
+  boot:
+    admin:
+      client:
+        url: http://localhost:8085
+        instance:
+          name: api-gateway
+          service-host-type: ip
+        enabled: true
   security:
     oauth2:
       resourceserver:
         jwt:
           issuer-uri: http://localhost:8082/realms/selmag
+      client:
+        registration:
+          keycloak:
+            client-id: api-gateway-metrics-client
+            client-secret: QXThewVNGgzp6nh1vN7fR6SXcfhMgk7O
+            authorization-grant-type: client_credentials
+            scope:
+              - metrics_server
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8082/realms/selmag
   cloud:
     gateway:
       server:
