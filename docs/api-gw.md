@@ -8,12 +8,15 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
 
 ## Запуск и проверка
 
-Модуль `api-gateway` слушает порт `8086` и, как и бизнес-сервисы, имеет два самодостаточных профиля:
+Модуль `api-gateway` слушает порт `8086` и, как и бизнес-сервисы, имеет три самодостаточных профиля:
 
 | Профиль | Файл | Маршруты | Eureka |
 |---|---|---|---|
 | `standalone` | `application-standalone.yml` | `http://127.0.0.1:8081`, `http://127.0.0.1:8084` | выключена (`eureka.client.enabled: false`) |
 | `cloud` | `application-cloud.yml` | `lb://selmag-catalogue-service`, `lb://selmag-feedback-service` | клиент включён, `fetch-registry: true`, но `register-with-eureka: false` |
+| `cloudconfig` | `application-cloudconfig.yml` + `config/cloud/selmag-api-gateway/cloudconfig/…` | из config-server (`lb://…`) | из config-server |
+
+В `cloudconfig` локально заданы только порт, имя приложения и адрес config-server (`http://config:config-password@localhost:8888`); маршруты, security, management и Eureka приходят из удалённого файла.
 
 В Eureka гейтвей **не регистрируется**: он entrypoint, по service-id его никто не вызывает — нужен только чтение реестра для `lb://`. Поэтому блок `eureka.instance` (lease, `prefer-ip-address`) не нужен.
 
@@ -47,6 +50,20 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
 - **Предикат `Host` в SCG 5.0 сравнивает заголовок вместе с портом** (`HostRoutePredicateFactory.includePort = true`, начиная с 4.2). Браузер шлёт `Host: ...nip.io:8086`, поэтому в паттерне порт обязателен: `Host=catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086`. Конфиг ментора (`SelMag-sc24`, SCG 4.1) без порта здесь не сработает и даст `404` от гейтвея.
 - Ключ конфигурации в SCG 5.0 — `spring.cloud.gateway.server.webflux.routes` (старый `spring.cloud.gateway.routes` не действует).
 - Артефакт зависимости — `spring-cloud-starter-gateway-server-webflux`: `spring-cloud-starter-gateway` переименован в Spring Cloud `2025.1`.
+
+## Что маршрутизируем (и что нет)
+
+Гейтвей здесь — **API gateway**: через него идут только REST-сервисы — `catalogue-service` и `feedback-service`.
+
+`manager-app` и `customer-app` намеренно не маршрутизируются — это самостоятельные entrypoint'ы для браузера, а не сервисы, которые кто-то вызывает по service-id:
+
+- у них своя аутентификация (`oauth2Login`, `ROLE_MANAGER` / `authenticated()`), сессии, CSRF и Thymeleaf — гейтвей ничего к этому не добавляет;
+- их публичный адрес зашит в Keycloak (`http://localhost:8080/*`, `http://localhost:8083`); за гейтвеем пришлось бы менять redirect URI/root URL, `forward-headers`/`PreserveHostHeader` и cookie-домен — это уже reverse proxy для UI;
+- их вызовы к catalogue/feedback и так идут напрямую по service-id, минуя гейтвей.
+
+## Логи
+
+Как и у остальных сервисов — `logback.xml` с `Loki4jAppender` (зависимость `com.github.loki4j:loki-logback-appender` 2.0.3). Appender включается, только когда определён `LOKI` (например, `LOKI=http://localhost:3100`), и пишет в `${LOKI}/loki/api/v1/push` с метками `app = selmag-api-gateway`, `host`, `level`. Проверено: записи с `app="selmag-api-gateway"` появляются в Loki (батчи уходят с задержкой до 60 с — `batchTimeout` по умолчанию).
 
 ## Eureka без безопасности
 

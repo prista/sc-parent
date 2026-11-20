@@ -14,6 +14,8 @@ spring:
         jwt:
           issuer-uri: http://localhost:8082/realms/selmag
   cloud:
+    config:
+      enabled: false # cloud profile - configuration comes from local files
     gateway:
       server:
         webflux:
@@ -28,6 +30,8 @@ spring:
                 - Host=feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086
 management:
   health:
+    config:
+      enabled: false # config client is disabled in this profile
     livenessstate:
       enabled: true
     readinessstate:

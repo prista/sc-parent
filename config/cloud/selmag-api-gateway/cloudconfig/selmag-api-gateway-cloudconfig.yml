@@ -1,0 +1,39 @@
+spring:
+  boot:
+    admin:
+      client:
+        enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: catalogue-service-route
+              uri: lb://selmag-catalogue-service
+              predicates:
+                - Host=catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+            - id: feedback-service-route
+              uri: lb://selmag-feedback-service
+              predicates:
+                - Host=feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*' # exposes /actuator/prometheus for VictoriaMetrics
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    registry-fetch-interval-seconds: 5         # local development; in prod — 30
+    register-with-eureka: false                # the gateway is an entrypoint, nobody calls it by service-id
