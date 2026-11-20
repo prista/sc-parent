@@ -1,0 +1,25 @@
+server:
+  port: 8086
+  forward-headers-strategy: framework
+spring:
+  application:
+    name: selmag-api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: catalogue-service-route
+              uri: http://127.0.0.1:8081
+              predicates:
+                - Host=catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+            - id: feedback-service-route
+              uri: http://127.0.0.1:8084
+              predicates:
+                - Host=feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+  config:
+    enabled: false
+eureka:
+  client:
+    enabled: false
+spring.cloud.loadbalancer.enabled: false
