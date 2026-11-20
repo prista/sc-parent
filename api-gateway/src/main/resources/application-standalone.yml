@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: selmag-api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8082/realms/selmag
   cloud:
     gateway:
       server:
@@ -19,6 +24,16 @@ spring:
                 - Host=feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086
   config:
     enabled: false
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*' # exposes /actuator/prometheus for VictoriaMetrics
 eureka:
   client:
     enabled: false

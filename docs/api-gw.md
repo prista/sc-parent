@@ -8,7 +8,16 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
 
 ## Запуск и проверка
 
-Модуль `api-gateway` слушает порт `8086`. Отдельный профиль ему пока не нужен — вся конфигурация в `application.yml`.
+Модуль `api-gateway` слушает порт `8086` и, как и бизнес-сервисы, имеет два самодостаточных профиля:
+
+| Профиль | Файл | Маршруты | Eureka |
+|---|---|---|---|
+| `standalone` | `application-standalone.yml` | `http://127.0.0.1:8081`, `http://127.0.0.1:8084` | выключена (`eureka.client.enabled: false`) |
+| `cloud` | `application-cloud.yml` | `lb://selmag-catalogue-service`, `lb://selmag-feedback-service` | клиент включён, `fetch-registry: true`, но `register-with-eureka: false` |
+
+В Eureka гейтвей **не регистрируется**: он entrypoint, по service-id его никто не вызывает — нужен только чтение реестра для `lb://`. Поэтому блок `eureka.instance` (lease, `prefer-ip-address`) не нужен.
+
+`lb://` здесь — штатный механизм гейтвея (`ReactiveLoadBalancerClientFilter`): правило проекта «`http://<service-id>`, никогда `lb://`» относится к `RestClient`/`WebClient` бизнес-сервисов с `DeferringLoadBalancerInterceptor`, а не к маршрутам SCG.
 
 1. `catalogue-service` с профилем `standalone` (порт `8081`):
 
@@ -16,10 +25,14 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
    SPRING_PROFILES_ACTIVE=standalone ./mvnw -pl catalogue-service spring-boot:run
    ```
 
-2. Гейтвей (без профиля):
+2. Гейтвей (порт `8086`):
 
    ```bash
-   ./mvnw -pl api-gateway spring-boot:run
+   # standalone: прямые адреса на localhost
+   SPRING_PROFILES_ACTIVE=standalone ./mvnw -pl api-gateway spring-boot:run
+
+   # cloud: сервисы находятся через Eureka (нужен запущенный eureka-server)
+   SPRING_PROFILES_ACTIVE=cloud ./mvnw -pl api-gateway spring-boot:run
    ```
 
 3. Swagger UI `catalogue-service` через гейтвей — рабочий URL:
@@ -34,3 +47,19 @@ Spring Cloud Gateway реализует API Gateway — единую точку 
 - **Предикат `Host` в SCG 5.0 сравнивает заголовок вместе с портом** (`HostRoutePredicateFactory.includePort = true`, начиная с 4.2). Браузер шлёт `Host: ...nip.io:8086`, поэтому в паттерне порт обязателен: `Host=catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086`. Конфиг ментора (`SelMag-sc24`, SCG 4.1) без порта здесь не сработает и даст `404` от гейтвея.
 - Ключ конфигурации в SCG 5.0 — `spring.cloud.gateway.server.webflux.routes` (старый `spring.cloud.gateway.routes` не действует).
 - Артефакт зависимости — `spring-cloud-starter-gateway-server-webflux`: `spring-cloud-starter-gateway` переименован в Spring Cloud `2025.1`.
+
+## Eureka без безопасности
+
+В отличие от проекта ментора (`DiscoveryBeans` с `client_credentials`-токеном для транспорта Eureka), у нас `eureka-server` намеренно неаутентифицирован. Поэтому гейтвею достаточно `spring-cloud-starter-netflix-eureka-client`: никаких `oauth2-client`-регистраций, токенов и `DiscoveryBeans` нет — в профиле `cloud` добавляется только блок `eureka.*`. Закрывать реестр OAuth2 в локальном окружении — лишняя сложность: реестр не публикуется наружу, а токен для инфраструктуры только усложняет запуск.
+
+## Метрики
+
+По аналогии с остальными сервисами:
+
+- `spring-boot-starter-actuator` + `micrometer-registry-prometheus` → `/actuator/prometheus`;
+- `SecurityConfig` — отдельная `SecurityWebFilterChain` с `securityMatcher("/actuator/**")`: reactive resource server (JWT, `issuer-uri` Keycloak) и `SCOPE_metrics`. Бизнес-маршруты цепочка не трогает — токен проверяют downstream-сервисы. Это тот же приём, что у `customer-app`, но без UI-цепочки;
+- job `selmag_api_gateway` в `config/victoria-metrics/promscrape.yaml` (target `host.docker.internal:8086`, `client_credentials`, scope `metrics`).
+
+Проверено: `/actuator/prometheus` → `401` без токена, `403` без scope `metrics`, `200` с токеном; в выдаче есть `spring_cloud_gateway_requests_seconds_*` с метками `routeId`/`routeUri`.
+
+`api-gateway` пока не Spring Boot Admin client: для регистрации нужен отдельный Keycloak-клиент (`api-gateway-metrics-client`, scope `metrics_server`), как у `catalogue-service`/`feedback-service`.
