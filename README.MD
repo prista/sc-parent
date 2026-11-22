@@ -23,6 +23,24 @@ kill -9 <PID>
 
 `--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
+**Docker-образ приложения.** Помимо инфраструктуры, в образ упаковывается и сам сервис: `spring-boot-maven-plugin` кладёт self-contained JAR в артефакт с классификатором `-exec`, а корневой `Dockerfile` распаковывает его через `jarmode=layertools` на слои. Сборка — в два шага (пример для `admin-server`):
+
+```bash
+./mvnw -pl admin-server clean install
+docker build --build-arg JAR_FILE=admin-server/target/admin-server-0.0.1-SNAPSHOT-exec.jar \
+  -t selmag/admin-server:26.1.1 .
+```
+
+`-t` (`--tag`) задаёт имя и тег образа в формате `репозиторий:версия`, `--build-arg JAR_FILE` — путь к JAR, который `Dockerfile` копирует в `/build`, а `.` — build context (из него же берётся `Dockerfile`). Запуск контейнера:
+
+```bash
+docker run --name selmag-admin-server -p 8085:8085 \
+  -e SPRING_PROFILES_ACTIVE=standalone -e JAVA_OPTS="-Xmx256m" \
+  selmag/admin-server:26.1.1
+```
+
+Профиль `standalone` обязателен — без него не загрузится `application-standalone.yaml`. `ENTRYPOINT` в `Dockerfile` — shell-форма (`exec java ${JAVA_OPTS} …`), поэтому переменные окружения подставляются. Учтите, что `localhost` внутри контейнера — это сам контейнер: чтобы сервис достучался до Keycloak, БД и прочей инфраструктуры на хосте, нужен `host.docker.internal` (на Linux — `--add-host=host.docker.internal:host-gateway`) и такие же адреса в конфигурации.
+
 **Профиль `standalone` и запуск приложений.** Все сервисы держат локальную конфигурацию в `application-standalone.*` (порты, datasource/MongoDB, Keycloak, management-эндпоинты), поэтому запускать их нужно **с профилем `standalone`** (либо `cloud` для режима с Eureka — см. ниже) — без профиля эти файлы не загрузятся:
 
 ```bash
