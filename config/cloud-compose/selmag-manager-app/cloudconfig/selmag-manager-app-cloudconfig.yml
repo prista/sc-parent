@@ -1,0 +1,69 @@
+# Вариант cloudconfig для запуска в Docker Compose (см. docker-compose.yaml).
+# Отличается от config/cloud/ только адресами: имена сервисов compose вместо localhost
+# и единый issuer Keycloak http://keycloak.localhost:8082 (см. README.MD).
+selmag:
+  services:
+    catalogue:
+      uri: http://selmag-catalogue-service
+      registration-id: keycloak
+spring:
+  boot:
+    admin:
+      client:
+        enabled: false
+  datasource:
+    # Внутри контейнера PostgreSQL manager-db слушает 5432 (наружу опубликован 5433).
+    url: jdbc:postgresql://manager-db:5432/manager
+    username: manager
+    password: manager
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://keycloak.localhost:8082/realms/selmag
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://keycloak.localhost:8082/realms/selmag
+            user-name-attribute: preferred_username
+        registration:
+          keycloak:
+            client-id: manager-app
+            client-secret: GrMdYSYyh3L4Cl1tsVXFnHI2CrZonsfN
+            scope:
+              - openid
+              - view_catalogue
+              - edit_catalogue
+              - microprofile-jwt
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://tempo:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+    registry-fetch-interval-seconds: 5

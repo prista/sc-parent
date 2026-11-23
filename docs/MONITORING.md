@@ -53,9 +53,11 @@
 
 ## Datasource'ы в Grafana
 
-Grafana → **Connections** → **Data sources** → **Add new data source** → выбрать тип → указать URL → **Save & test**.
+**В docker compose** datasource'ы создаются автоматически из `config/grafana/provisioning/datasources/datasources.yml` — руками ничего заводить не нужно. У них стабильные UID (`prometheus`, `loki`, `tempo`), на которые ссылаются JSON дашбордов, а URL'ы — имена сервисов compose.
 
-| Имя | Тип | URL внутри Grafana | Для чего |
+**При запуске Grafana через `docker run`** (там provisioning не монтируется) создайте их вручную: Grafana → **Connections** → **Data sources** → **Add new data source** → выбрать тип → указать URL → **Save & test**.
+
+| Имя | Тип | URL внутри Grafana (`docker run`) | Для чего |
 |---|---|---|---|
 | `VictoriaMetrics` | Prometheus | `http://host.docker.internal:8428` | метрики |
 | `loki` | Loki | `http://host.docker.internal:3100` | логи |
@@ -63,7 +65,7 @@ Grafana → **Connections** → **Data sources** → **Add new data source** →
 
 `Access` оставьте `Server` (значение по умолчанию): запросы проксирует контейнер Grafana, браузеру `host.docker.internal` не нужен.
 
-Datasource'ы и дашборды хранятся в `./data/grafana/grafana.db` (каталог в `.gitignore`), а не в репозитории. На свежем клоне или после удаления `data/grafana` их нужно создать заново. Каталоги `config/grafana/provisioning` и `config/grafana/dashboards` пока пустые — это задел на будущий автоматический provisioning.
+В compose datasource'ы и JVM-дашборд лежат в репозитории (`config/grafana/provisioning` и `config/grafana/dashboards`) и поднимаются при старте Grafana. При запуске через `docker run` состояние хранится в `./data/grafana/grafana.db` (каталог в `.gitignore`), и на свежем клоне datasource'ы нужно создать заново.
 
 ## Метрики
 
@@ -183,9 +185,11 @@ Loki буферизует записи: батч уходит раз в 60 се�
 
 ### Импорт дашборда
 
+**В docker compose** дашборд уже провижинится из `config/grafana/dashboards/jvm-micrometer.json` (uid `jvm-micrometer`) — импортировать вручную не нужно. Инструкция ниже — для запуска Grafana через `docker run`.
+
 1. Grafana → **Dashboards** → **New** → **Import**.
 2. В поле **Import via grafana.com** введите ID `4701` → **Load**.
-3. Выберите datasource **VictoriaMetrics** (панели дашборда используют Prometheus-совместимый тип; в текущей Grafana у него uid `prometheus`).
+3. Выберите datasource **VictoriaMetrics** (панели дашборда используют Prometheus-совместимый тип; в текущей Grafana у него uid `prometheus`). **Этот шаг обязателен**: если пропустить выбор, в панелях останется литерал `${DS_PROMETHEUS}` и Grafana покажет «Datasource ${DS_PROMETHEUS} was not found» с `N/A` вместо значений.
 4. **Import**.
 
 У дашборда две переменные: `application` (`label_values(application)`) и `instance` (`label_values(jvm_memory_used_bytes{application="$application"}, instance)`). После импорта подождите хотя бы один скрап (до 60 секунд), иначе списки значений будут пустыми.
@@ -261,6 +265,7 @@ curl -s -H 'Accept: application/json' http://127.0.0.1:8761/eureka/apps \
 | В Loki нет логов | не задан `LOKI` или не прошёл батч | проверить env, подождать до минуты |
 | В Tempo нет трейсов | Tempo не запущен или сервис не входит в список трассируемых | `curl :3200/ready`, смотреть Service Name |
 | Пустой JVM-дашборд | не выбран datasource или ещё не было скрапа | выбрать `VictoriaMetrics`, подождать 60 с |
+| «Datasource ${DS_PROMETHEUS} was not found» | дашборд импортирован с grafana.com без выбора datasource — input-переменная `DS_PROMETHEUS` не подставилась | в compose пересоздать Grafana с провижинингом (`config/grafana/dashboards`); при ручном импорте — импортировать заново и выбрать datasource на шаге 3 |
 
 ## Kubernetes: что изменится (на будущее)
 
@@ -270,7 +275,7 @@ curl -s -H 'Accept: application/json' http://127.0.0.1:8761/eureka/apps \
 - **Keycloak.** Внутри кластера его порт — `8080`. Значение `iss` определяется `hostname` Keycloak, а `issuer-uri` всех сервисов должен совпадать с `iss` (обычно это внешний Ingress-URL). `token_url` для скрапа может ходить по внутреннему DNS. Вместо `start-dev` — `start` с базой данных.
 - **Скрапинг.** Вместо статических target'ов — `kubernetes_sd_configs` (роли `endpoints`/`pods`, RBAC, relabeling, метка `application`) или VictoriaMetrics Operator (`VMServiceScrape`). Для маленького демо статические Service DNS-адреса тоже подойдут.
 - **Probes.** Группы `/actuator/health/liveness` и `/actuator/health/readiness` есть, но в четырёх сервисах `/actuator/**` закрыт `SCOPE_metrics`, поэтому kubelet без токена получит 401. Варианты: `permitAll` только для health-групп, отдельный management-порт или TCP/exec-probe.
-- **Конфиги и секреты.** `promscrape.yaml` содержит client secret — ему место в Secret; остальное (Tempo, Loki-настройки, dashboard JSON) — в ConfigMap. Provisioning Grafana позволит не создавать datasource'ы руками.
+- **Конфиги и секреты.** `promscrape.yaml` содержит client secret — ему место в Secret; остальное (Tempo, Loki-настройки, dashboard JSON) — в ConfigMap. Provisioning Grafana уже есть в `config/grafana/provisioning` и `config/grafana/dashboards` — datasource'ы и дашборд не нужно создавать руками.
 - **Хранение.** PVC для VictoriaMetrics, Loki, Tempo и Grafana (или полный provisioning); для stateful-компонентов — StatefulSet и `ReadWriteOnce`; настроить retention.
 - **Приложения.** Сейчас адреса PostgreSQL, MongoDB, Keycloak, catalogue/feedback и admin-server прописаны как `localhost` в `application-standalone.yml`; для k8s нужен отдельный профиль или переменные окружения с Service DNS.
 - **Доступ.** Браузер — через Ingress или `kubectl port-forward svc/grafana 3000:3000`. VictoriaMetrics, Loki и Tempo наружу не публиковать: у них нет аутентификации.

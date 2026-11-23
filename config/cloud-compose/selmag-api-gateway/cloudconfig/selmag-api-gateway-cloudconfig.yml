@@ -1,0 +1,57 @@
+# Вариант cloudconfig для запуска в Docker Compose (см. docker-compose.yaml).
+# Отличается от config/cloud/ адресами (keycloak.localhost, eureka-server) и включённым
+# SBA-клиентом: в compose admin-server поднимается рядом.
+spring:
+  boot:
+    admin:
+      client:
+        url: http://admin-server:8085
+        instance:
+          name: api-gateway
+          service-host-type: ip
+        enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://keycloak.localhost:8082/realms/selmag
+      client:
+        provider:
+          keycloak:
+            issuer-uri: http://keycloak.localhost:8082/realms/selmag
+        registration:
+          keycloak:
+            client-id: api-gateway-metrics-client
+            client-secret: QXThewVNGgzp6nh1vN7fR6SXcfhMgk7O
+            authorization-grant-type: client_credentials
+            scope:
+              - metrics_server
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: catalogue-service-route
+              uri: lb://selmag-catalogue-service
+              predicates:
+                - Host=catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+            - id: feedback-service-route
+              uri: lb://selmag-feedback-service
+              predicates:
+                - Host=feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*' # exposes /actuator/prometheus for VictoriaMetrics
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+    registry-fetch-interval-seconds: 5         # local development; in prod — 30
+    register-with-eureka: false                # the gateway is an entrypoint, nobody calls it by service-id

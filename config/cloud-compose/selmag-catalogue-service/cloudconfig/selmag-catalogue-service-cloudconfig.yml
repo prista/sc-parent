@@ -1,0 +1,80 @@
+# Вариант cloudconfig для запуска в Docker Compose (см. docker-compose.yaml).
+# Отличается от config/cloud/ только адресами: имена сервисов compose вместо localhost
+# и единый issuer Keycloak http://keycloak.localhost:8082 (см. README.MD).
+spring:
+  boot:
+    admin:
+      client:
+        url: http://admin-server:8085
+        instance:
+          name: catalogue-service
+          service-host-type: ip
+        enabled: true
+  datasource:
+    url: jdbc:postgresql://catalogue-db:5432/catalogue
+    username: catalogue
+    password: catalogue
+  flyway:
+    schemas:
+      - public
+      - catalogue
+  jpa:
+    show-sql: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://keycloak.localhost:8082/realms/selmag
+      client:
+        registration:
+          keycloak:
+            client-id: catalogue-service-metrics-client
+            client-secret: XzsC20nVY1uDO1xDAE1o7QsqkRqRyban
+            authorization-grant-type: client_credentials
+            scope:
+              - metrics_server
+        provider:
+          keycloak:
+            issuer-uri: http://keycloak.localhost:8082/realms/selmag
+logging:
+  level:
+    sql: info
+springdoc:
+  swagger-ui:
+    oauth:
+      client-id: catalogue-service-swagger-ui
+      use-pkce-with-authorization-code-grant: true
+keycloak:
+  uri: http://keycloak.localhost:8082
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://tempo:4318/v1/traces
+          transport: http
+  otlp:
+    metrics:
+      export:
+        enabled: false # metrics stay in Prometheus / VictoriaMetrics
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: '*'
+eureka:
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+    registry-fetch-interval-seconds: 5

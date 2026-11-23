@@ -1,0 +1,9 @@
+# Контекст сборки — корень репозитория (Dockerfile ADD-ит только -exec JAR).
+# Отсекаем всё остальное, чтобы не гонять target-каталоги и данные в контекст.
+.git
+.idea
+data
+logs
+docs
+**/target/*
+!**/target/*-exec.jar

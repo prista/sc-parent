@@ -1,0 +1,88 @@
+# prometheus-scrape для Docker Compose (см. docker-compose.yaml).
+# В отличие от promscrape.yaml цели — имена сервисов compose и их внутренние порты;
+# токен берётся у Keycloak по его issuer-хосту (например, http://keycloak.localhost:8082).
+scrape_configs:
+  - job_name: selmag_admin_service
+    static_configs:
+      - targets: ["http://admin-server:8085"]
+        labels:
+          application: selmag-admin-service
+    metrics_path: /actuator/prometheus
+    oauth2: # client_credentials для защищённых /actuator/** (scope metrics)
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials
+  - job_name: selmag_catalogue_service
+    static_configs:
+      - targets: ["http://catalogue-service:8081"]
+        labels:
+          application: selmag-catalogue-service
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials
+  - job_name: selmag_feedback_service
+    static_configs:
+      - targets: ["http://feedback-service:8084"]
+        labels:
+          application: selmag-feedback-service
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials
+  - job_name: selmag_customer_app
+    static_configs:
+      - targets: ["http://customer-app:8083"]
+        labels:
+          application: selmag-customer-app
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials
+  - job_name: selmag_manager_app
+    static_configs:
+      - targets: ["http://manager-app:8080"]
+        labels:
+          application: selmag-manager-app
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials
+  - job_name: selmag_api_gateway
+    static_configs:
+      - targets: ["http://api-gateway:8086"]
+        labels:
+          application: selmag-api-gateway
+    metrics_path: /actuator/prometheus
+    oauth2:
+      client_id: victoria-metrics
+      client_secret: v2LP964Gu6bHfiEfkXBFKOHBKHx2pkSV
+      token_url: http://keycloak.localhost:8082/realms/selmag/protocol/openid-connect/token
+      scopes:
+        - metrics
+      endpoint_params:
+        grant_type: client_credentials

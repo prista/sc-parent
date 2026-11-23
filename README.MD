@@ -23,6 +23,21 @@ kill -9 <PID>
 
 `--hostname=http://localhost:8082 --hostname-strict=true` фиксируют issuer Keycloak. Без фиксированного hostname `start-dev` подставляет в `iss` хост из запроса: токен, запрошенный контейнером (VictoriaMetrics) через `host.docker.internal:8082`, получил бы `iss=http://host.docker.internal:8082/realms/selmag` и не прошёл бы валидацию в сервисах с `issuer-uri: http://localhost:8082/realms/selmag` (401). С этими флагами `iss` всегда `http://localhost:8082/realms/selmag`, независимо от того, по какому адресу контейнер обратился к Keycloak (`host.docker.internal:8082` на macOS, `172.17.0.1:8082` на Linux).
 
+**Docker Compose.** Весь стек (инфраструктура + 8 приложений) поднимается одной командой. Сначала соберите `-exec` JAR-ы — образы используют их как build-arg:
+
+```bash
+./mvnw clean package -DskipTests
+docker compose up -d --build
+docker compose ps
+```
+
+Конфигурация приложений для compose лежит в `config/cloud-compose/` (копия `config/cloud/` с именами сервисов вместо `localhost`); её отдаёт `config-server`, а сервисы запускаются с профилем `cloudconfig`. `eureka-server` и `admin-server` идут с `standalone`.
+
+- Keycloak — issuer и админка: `http://keycloak.localhost:8082` (админка `/admin`, `admin`/`admin`). `keycloak.localhost` браузер резолвит в `127.0.0.1` (`*.localhost` → loopback, правка `/etc/hosts` не нужна), а внутри compose — через network alias на контейнер `keycloak`; поэтому issuer `http://keycloak.localhost:8082/realms/selmag` одинаков для браузера и сервисов.
+- UI: manager `http://localhost:8080/catalogue/products/list` (`j.dewar`/`password`), storefront `http://localhost:8083/customer/products/list` (`j.daniels`/`password`), Spring Boot Admin `http://localhost:8085`, Eureka `http://localhost:8761`.
+- REST — через gateway по nip.io-хостам: `http://catalogue.api.sandbox.drm.com.127.0.0.1.nip.io:8086`, `http://feedback.api.sandbox.drm.com.127.0.0.1.nip.io:8086`.
+- Grafana `http://localhost:3000`: datasource'ы и JVM-дашборд поднимаются автоматически из `config/grafana/provisioning` и `config/grafana/dashboards` (стабильные UID `prometheus`/`loki`/`tempo`, URL'ы — имена сервисов: `http://victoria-metrics:8428`, `http://loki:3100`, `http://tempo:3200`). Ручное «Add new data source» нужно только при запуске Grafana через `docker run`.
+
 **Docker-образ приложения.** Помимо инфраструктуры, в образ упаковывается и сам сервис: `spring-boot-maven-plugin` кладёт self-contained JAR в артефакт с классификатором `-exec`, а корневой `Dockerfile` распаковывает его через `jarmode=layertools` на слои. Сборка — в два шага (пример для `admin-server`):
 
 ```bash
