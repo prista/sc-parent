@@ -1,0 +1,27 @@
+# Grafana provisioning: datasource'ы поднимаются автоматически (в docker compose).
+# UID'ы стабильные и на них ссылается JSON дашбордов (config/grafana/dashboards).
+# URL'ы — имена сервисов compose: Grafana работает в той же сети.
+apiVersion: 1
+
+datasources:
+  - name: VictoriaMetrics
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://victoria-metrics:8428
+    isDefault: true
+    editable: false
+
+  - name: loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+
+  - name: tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    editable: false

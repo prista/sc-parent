@@ -1,0 +1,12 @@
+# Grafana provisioning: дашборды читаются из каталога, смонтированного в контейнер.
+apiVersion: 1
+
+providers:
+  - name: selmag
+    orgId: 1
+    folder: selmag
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards
